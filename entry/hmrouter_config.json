@@ -1,0 +1,4 @@
+{
+  "scanDir": ["src/main/ets/pages"],
+  "saveGeneratedFile": true
+}
