@@ -2,24 +2,25 @@ import { HMRouter } from '@hadss/hmrouter'
 import { KeyboardAvoidMode } from '@kit.ArkUI'
 import { RouteConstants } from '../constants/RouteConstants'
 import { globalTabState } from '../stores/TabState'
+import { sendChatMessage, ChatMessageDTO, ChatRequest } from '../api/ChatApi'
 
 interface ChatItem {
   id: number
-  type: 'user' | 'ai'
+  role: 'user' | 'assistant'
   content: string
+  createTime: number
 }
 
 @HMRouter({ pageUrl: RouteConstants.SETTING })
 @ComponentV2
 export struct Setting {
-  private typingTimer: number = -1
-  // 滚动示例，有很多滚动方法，这里用到的Index索引滚动到列表的指定元素
+  // 滚动示例：这里用 Scroller 控制 List 滚动到底部
   private listScroller: Scroller = new Scroller()
-  private nextId: number = 1
 
   @Local inputValue: string = ''
   @Local chatList: ChatItem[] = []
   @Local isSending: boolean = false
+  @Local conversationId: number = 0
 
   aboutToAppear(): void {
     globalTabState.setCurrentTab(RouteConstants.SETTING)
@@ -27,12 +28,7 @@ export struct Setting {
     // 键盘弹起时，页面整体 resize，避免底部输入框被键盘遮挡
     this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
   }
-  aboutToDisappear(): void {
-    if (this.typingTimer !== -1) {
-      clearInterval(this.typingTimer)
-      this.typingTimer = -1
-    }
-  }
+
   /**
    * 滚动到底部
    *
@@ -48,76 +44,86 @@ export struct Setting {
   }
 
   /**
-   * 模拟 AI 接口
+   * 发送消息
    *
-   * 后面真正接接口时，可以把这里替换成 request 请求。
+   * 当前流程：
+   * 1. 读取输入框内容
+   * 2. 先把用户消息追加到页面
+   * 3. 调用 Next.js 后端接口 POST /api/chat
+   * 4. 拿到后端返回的 assistant 消息
+   * 5. 把 assistant 消息追加到页面
    */
-  mockAskAi(question: string): void {
-    const fullText: string = `你刚才说的是：${question}。这是一个模拟 AI 回复，当前正在使用打字机效果逐字输出。`
+  async sendMessage(): Promise<void> {
+    const content = this.inputValue.trim()
 
-    const aiItem: ChatItem = {
-      id: this.nextId++,
-      type: 'ai',
-      content: 'AI 正在思考...'
+    if (!content || this.isSending) {
+      return
     }
 
-    this.chatList = this.chatList.concat([aiItem])
+    this.isSending = true
+    this.inputValue = ''
+
+    const now = Date.now()
+
+    const tempUserMessage: ChatItem = {
+      id: now,
+      role: 'user',
+      content,
+      createTime: now
+    }
+
+    this.chatList = this.chatList.concat([tempUserMessage])
     this.scrollToBottom()
 
-    let currentIndex: number = 0
+    try {
+      const res = await sendChatMessage({
+        conversationId: this.conversationId || undefined,
+        content
+      })
 
-    setTimeout(() => {
-      this.typingTimer = setInterval(() => {
-        currentIndex++
+      if (res.code !== 0) {
+        const failMessage: ChatItem = {
+          id: Date.now(),
+          role: 'assistant',
+          content: res.message || '后端返回异常，请稍后重试。',
+          createTime: Date.now()
+        }
 
-        const currentText: string = fullText.slice(0, currentIndex)
+        this.chatList = this.chatList.concat([failMessage])
+        this.scrollToBottom()
+        return
+      }
 
-        this.chatList = this.chatList.map((item: ChatItem) => {
-          if (item.id === aiItem.id) {
-            return {
-              id: item.id,
-              type: item.type,
-              content: currentText
-            }
+      this.conversationId = res.data.conversationId
+
+      const assistantMessages: ChatItem[] = res.data.messages
+        .filter((item: ChatMessageDTO) => item.role === 'assistant')
+        .map((item: ChatMessageDTO) => {
+          const message: ChatItem = {
+            id: item.id,
+            role: item.role,
+            content: item.content,
+            createTime: item.createTime
           }
 
-          return item
+          return message
         })
 
-        this.scrollToBottom()
+      this.chatList = this.chatList.concat(assistantMessages)
+      this.scrollToBottom()
+    } catch (error) {
+      const errorMessage: ChatItem = {
+        id: Date.now(),
+        role: 'assistant',
+        content: '请求后端失败，请检查 Next.js 服务是否启动，以及接口地址是否正确。',
+        createTime: Date.now()
+      }
 
-        if (currentIndex >= fullText.length) {
-          clearInterval(this.typingTimer)
-          this.typingTimer = -1
-          this.isSending = false
-        }
-      }, 60)
-    }, 500)
-  }
-
-  sendMsg(): void {
-    const text: string = this.inputValue.trim()
-
-    if (text === '') {
-      return
+      this.chatList = this.chatList.concat([errorMessage])
+      this.scrollToBottom()
+    } finally {
+      this.isSending = false
     }
-
-    if (this.isSending) {
-      return
-    }
-
-    const userItem: ChatItem = {
-      id: this.nextId++,
-      type: 'user',
-      content: text
-    }
-
-    this.chatList = this.chatList.concat([userItem])
-    this.inputValue = ''
-    this.isSending = true
-
-    this.scrollToBottom()
-    this.mockAskAi(text)
   }
 
   build() {
@@ -152,7 +158,7 @@ export struct Setting {
       ForEach(this.chatList, (item: ChatItem) => {
         ListItem() {
           Row() {
-            if (item.type === 'user') {
+            if (item.role === 'user') {
               Blank()
 
               Text(item.content)
@@ -161,6 +167,7 @@ export struct Setting {
                 .backgroundColor('#1677FF')
                 .borderRadius(10)
                 .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                .constraintSize({ maxWidth: '75%' })
             } else {
               Text(item.content)
                 .fontSize(16)
@@ -168,14 +175,16 @@ export struct Setting {
                 .backgroundColor(Color.White)
                 .borderRadius(10)
                 .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+                .constraintSize({ maxWidth: '75%' })
 
               Blank()
             }
           }
           .width('100%')
           .margin({ bottom: 12 })
+          .alignItems(VerticalAlign.Top)
         }
-      }, (item: ChatItem) => `${item.id}-${item.content}`)
+      }, (item: ChatItem) => `${item.id}`)
 
       // 底部占位，防止最后一条消息贴着输入框
       ListItem() {
@@ -209,7 +218,7 @@ export struct Setting {
         .margin({ left: 10 })
         .enabled(!this.isSending)
         .onClick(() => {
-          this.sendMsg()
+          this.sendMessage()
         })
     }
     .width('100%')
