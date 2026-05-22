@@ -1,41 +1,67 @@
-import { HMRouter } from '@hadss/hmrouter'
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { KeyboardAvoidMode } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 
 import { RouteConstants } from '../constants/RouteConstants'
 import { globalTabState } from '../stores/TabState'
-import { sendChatMessage, ChatMessageDTO } from '../api/ChatApi'
+import { sendChatMessage, ChatMessageDTO, ChatRequest } from '../api/ChatApi'
 import { ChatMessage } from '../models/ChatModel'
 import { ChatStorage } from '../utils/ChatStorage'
+import { AuthStorage } from '../utils/AuthStorage'
+import { globalAuthStore } from '../stores/AuthStore'
 
 @HMRouter({ pageUrl: RouteConstants.SETTING })
 @ComponentV2
 export struct Setting {
-  // 滚动示例：这里用 Scroller 控制 List 滚动到底部
   private listScroller: Scroller = new Scroller()
 
   @Local inputValue: string = ''
   @Local chatList: ChatMessage[] = []
   @Local isSending: boolean = false
   @Local conversationId: number = 0
+  @Local isAuthReady: boolean = false
 
   aboutToAppear(): void {
     globalTabState.setCurrentTab(RouteConstants.SETTING)
 
-    // 键盘弹起时，页面整体 resize，避免底部输入框被键盘遮挡
+    // 键盘弹起时，页面整体 resize，避免输入框被遮挡
     this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
 
-    // 页面进入时读取本地聊天缓存
-    this.loadChatCache()
+    // 进入页面时先初始化登录态
+    this.initAuth()
   }
 
   /**
-   * 页面进入时读取本地缓存
+   * 初始化登录态
    *
-   * 注意：
-   * 1. aboutToAppear 保持 void
-   * 2. 真正的异步逻辑放到单独方法里
-   * 3. 读取到缓存后恢复 conversationId 和 chatList
+   * 流程：
+   * 1. 从本地 AuthStorage 读取 token 和 userInfo
+   * 2. 如果没有登录缓存，跳转 Login 页面
+   * 3. 如果有登录缓存，写入全局 AuthStore
+   * 4. 登录态确认后，再读取聊天历史缓存
+   */
+  async initAuth(): Promise<void> {
+    const context = getContext(this) as common.UIAbilityContext
+    const authCache = await AuthStorage.getAuthCache(context)
+
+    if (!authCache) {
+      globalAuthStore.clearAuth()
+
+      HMRouterMgr.replace({
+        pageUrl: RouteConstants.LOGIN
+      })
+
+      return
+    }
+
+    globalAuthStore.setAuth(authCache.token, authCache.userInfo)
+    this.isAuthReady = true
+
+    await this.loadChatCache()
+  }
+
+  /**
+   * 页面进入时读取本地聊天缓存
    */
   async loadChatCache(): Promise<void> {
     const context = getContext(this) as common.UIAbilityContext
@@ -49,10 +75,6 @@ export struct Setting {
 
   /**
    * 保存当前聊天缓存
-   *
-   * 保存内容：
-   * 1. conversationId
-   * 2. chatList
    */
   async saveChatCache(): Promise<void> {
     const context = getContext(this) as common.UIAbilityContext
@@ -61,11 +83,6 @@ export struct Setting {
 
   /**
    * 清空聊天历史
-   *
-   * 注意：
-   * 1. 页面 chatList 要清空
-   * 2. conversationId 也要重置
-   * 3. 本地 Preferences 缓存也要删除
    */
   async clearChatHistory(): Promise<void> {
     const context = getContext(this) as common.UIAbilityContext
@@ -77,12 +94,26 @@ export struct Setting {
   }
 
   /**
-   * 滚动到底部
+   * 退出登录
    *
    * 注意：
-   * 1. chatList 变化后，List 需要一点时间完成重新渲染
-   * 2. 所以这里用 setTimeout 延迟执行滚动
-   * 3. this.chatList.length 对应底部占位 ListItem 的索引
+   * 这里目前只清空登录缓存，不清空聊天历史。
+   * 如果你希望退出登录时也清空聊天记录，可以额外调用：
+   * await ChatStorage.clearChatCache(context)
+   */
+  async logout(): Promise<void> {
+    const context = getContext(this) as common.UIAbilityContext
+
+    await AuthStorage.clearAuthCache(context)
+    globalAuthStore.clearAuth()
+
+    HMRouterMgr.replace({
+      pageUrl: RouteConstants.LOGIN
+    })
+  }
+
+  /**
+   * 滚动到底部
    */
   scrollToBottom(): void {
     setTimeout(() => {
@@ -92,18 +123,9 @@ export struct Setting {
 
   /**
    * 发送消息
-   *
-   * 当前流程：
-   * 1. 读取输入框内容
-   * 2. 先把用户消息追加到页面
-   * 3. 保存本地缓存
-   * 4. 调用 Next.js 后端接口 POST /api/chat
-   * 5. 拿到后端返回的 assistant 消息
-   * 6. 把 assistant 消息追加到页面
-   * 7. 再次保存本地缓存
    */
   async sendMessage(): Promise<void> {
-    const content = this.inputValue.trim()
+    const content: string = this.inputValue.trim()
 
     if (!content || this.isSending) {
       return
@@ -112,12 +134,12 @@ export struct Setting {
     this.isSending = true
     this.inputValue = ''
 
-    const now = Date.now()
+    const now: number = Date.now()
 
     const tempUserMessage: ChatMessage = {
       id: now,
       role: 'user',
-      content,
+      content: content,
       createTime: now
     }
 
@@ -126,17 +148,24 @@ export struct Setting {
     this.scrollToBottom()
 
     try {
-      const res = await sendChatMessage({
-        conversationId: this.conversationId || undefined,
-        content
-      })
+      const requestParams: ChatRequest = {
+        content: content
+      }
+
+      if (this.conversationId > 0) {
+        requestParams.conversationId = this.conversationId
+      }
+
+      const res = await sendChatMessage(requestParams)
 
       if (res.code !== 0) {
+        const failNow: number = Date.now()
+
         const failMessage: ChatMessage = {
-          id: Date.now(),
+          id: failNow,
           role: 'assistant',
           content: res.message || '后端返回异常，请稍后重试。',
-          createTime: Date.now()
+          createTime: failNow
         }
 
         this.chatList = this.chatList.concat([failMessage])
@@ -149,7 +178,7 @@ export struct Setting {
 
       const assistantMessages: ChatMessage[] = res.data.messages
         .filter((item: ChatMessageDTO) => item.role === 'assistant')
-        .map((item: ChatMessageDTO) => {
+        .map((item: ChatMessageDTO): ChatMessage => {
           const message: ChatMessage = {
             id: item.id,
             role: item.role,
@@ -164,11 +193,15 @@ export struct Setting {
       await this.saveChatCache()
       this.scrollToBottom()
     } catch (error) {
+      console.error(`send message error: ${JSON.stringify(error)}`)
+
+      const errorNow: number = Date.now()
+
       const errorMessage: ChatMessage = {
-        id: Date.now(),
+        id: errorNow,
         role: 'assistant',
         content: '请求后端失败，请检查 Next.js 服务是否启动，以及接口地址是否正确。',
-        createTime: Date.now()
+        createTime: errorNow
       }
 
       this.chatList = this.chatList.concat([errorMessage])
@@ -193,23 +226,49 @@ export struct Setting {
   @Builder
   Header() {
     Row() {
-      Text('聊天 Demo')
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#222222')
+      Column() {
+        Text('聊天 Demo')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#222222')
+
+        if (globalAuthStore.userInfo !== null) {
+          Text(`当前用户：${globalAuthStore.userInfo.nickname}`)
+            .fontSize(12)
+            .fontColor('#999999')
+            .margin({ top: 2 })
+        } else {
+          Text('未登录')
+            .fontSize(12)
+            .fontColor('#999999')
+            .margin({ top: 2 })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
 
       Blank()
 
-      Button('清空')
-        .height(32)
-        .fontSize(14)
-        .enabled(this.chatList.length > 0 && !this.isSending)
-        .onClick(() => {
-          this.clearChatHistory()
-        })
+      Row() {
+        Button('清空')
+          .height(32)
+          .fontSize(14)
+          .enabled(this.chatList.length > 0 && !this.isSending)
+          .onClick(() => {
+            this.clearChatHistory()
+          })
+
+        Button('退出')
+          .height(32)
+          .fontSize(14)
+          .margin({ left: 8 })
+          .enabled(!this.isSending)
+          .onClick(() => {
+            this.logout()
+          })
+      }
     }
     .width('100%')
-    .height(56)
+    .height(64)
     .padding({ left: 16, right: 16 })
     .backgroundColor(Color.White)
     .alignItems(VerticalAlign.Center)
@@ -218,6 +277,25 @@ export struct Setting {
   @Builder
   MessageList() {
     List({ scroller: this.listScroller }) {
+      if (this.chatList.length === 0) {
+        ListItem() {
+          Column() {
+            Text('暂无聊天记录')
+              .fontSize(16)
+              .fontColor('#999999')
+
+            Text('输入内容后开始聊天')
+              .fontSize(13)
+              .fontColor('#BBBBBB')
+              .margin({ top: 8 })
+          }
+          .width('100%')
+          .height(240)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+      }
+
       ForEach(this.chatList, (item: ChatMessage) => {
         ListItem() {
           Row() {
@@ -263,7 +341,6 @@ export struct Setting {
         }
       }, (item: ChatMessage) => `${item.id}`)
 
-      // 底部占位，防止最后一条消息贴着输入框
       ListItem() {
         Row() {
           Blank()
@@ -296,7 +373,7 @@ export struct Setting {
           left: 14,
           right: 14
         })
-        .enabled(!this.isSending)
+        .enabled(!this.isSending && this.isAuthReady)
         .onChange((value: string) => {
           this.inputValue = value
         })
@@ -304,7 +381,7 @@ export struct Setting {
       Button(this.isSending ? '发送中' : '发送')
         .height(44)
         .margin({ left: 10 })
-        .enabled(!this.isSending)
+        .enabled(!this.isSending && this.isAuthReady)
         .onClick(() => {
           this.sendMessage()
         })
