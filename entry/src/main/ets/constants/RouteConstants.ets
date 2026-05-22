@@ -5,6 +5,7 @@ export class RouteConstants {
   static readonly HOME: string = 'pages/Home'
   static readonly SETTING: string = 'pages/Setting'
   static readonly PRODUCT_DETAIL: string = 'pages/ProductDetail'
+  static readonly LOGIN: string = 'pages/Login'
 }
 
 export class RouteTitle {
