@@ -15,6 +15,20 @@ import { globalAuthStore } from '../stores/AuthStore'
 export struct Setting {
   private listScroller: Scroller = new Scroller()
 
+  // AI 思考气泡相关
+  private thinkingTimer: number = -1
+  private readonly minThinkingDuration: number = 2000
+  private readonly thinkingInterval: number = 600
+  private readonly thinkingTexts: string[] = [
+    'AI 正在思考中...',
+    '正在整理上下文...',
+    '正在生成回复...',
+    '马上就好...'
+  ]
+
+  @Local thinkingMessageId: number = 0
+  @Local thinkingTextIndex: number = 0
+
   @Local inputValue: string = ''
   @Local chatList: ChatMessage[] = []
   @Local isSending: boolean = false
@@ -31,14 +45,12 @@ export struct Setting {
     this.initAuth()
   }
 
+  aboutToDisappear(): void {
+    this.stopThinkingTimer()
+  }
+
   /**
    * 初始化登录态
-   *
-   * 流程：
-   * 1. 从本地 AuthStorage 读取 token 和 userInfo
-   * 2. 如果没有登录缓存，跳转 Login 页面
-   * 3. 如果有登录缓存，写入全局 AuthStore
-   * 4. 登录态确认后，再读取聊天历史缓存
    */
   async initAuth(): Promise<void> {
     const context = getContext(this) as common.UIAbilityContext
@@ -87,6 +99,9 @@ export struct Setting {
   async clearChatHistory(): Promise<void> {
     const context = getContext(this) as common.UIAbilityContext
 
+    this.stopThinkingTimer()
+    this.thinkingMessageId = 0
+    this.thinkingTextIndex = 0
     this.chatList = []
     this.conversationId = 0
 
@@ -95,14 +110,11 @@ export struct Setting {
 
   /**
    * 退出登录
-   *
-   * 注意：
-   * 这里目前只清空登录缓存，不清空聊天历史。
-   * 如果你希望退出登录时也清空聊天记录，可以额外调用：
-   * await ChatStorage.clearChatCache(context)
    */
   async logout(): Promise<void> {
     const context = getContext(this) as common.UIAbilityContext
+
+    this.stopThinkingTimer()
 
     await AuthStorage.clearAuthCache(context)
     globalAuthStore.clearAuth()
@@ -122,12 +134,131 @@ export struct Setting {
   }
 
   /**
+   * 等待指定时间
+   */
+  wait(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve()
+      }, ms)
+    })
+  }
+
+  /**
+   * 开始展示 AI 思考气泡
+   */
+  startThinkingBubble(): number {
+    const thinkingId: number = Date.now() + 1
+
+    this.stopThinkingTimer()
+
+    this.thinkingMessageId = thinkingId
+    this.thinkingTextIndex = 0
+
+    const thinkingMessage: ChatMessage = {
+      id: thinkingId,
+      role: 'assistant',
+      content: this.thinkingTexts[0],
+      createTime: thinkingId
+    }
+
+    this.chatList = this.chatList.concat([thinkingMessage])
+    this.scrollToBottom()
+
+    this.thinkingTimer = setInterval(() => {
+      this.thinkingTextIndex = (this.thinkingTextIndex + 1) % this.thinkingTexts.length
+      this.updateThinkingBubble(thinkingId, this.thinkingTexts[this.thinkingTextIndex])
+    }, this.thinkingInterval)
+
+    return thinkingId
+  }
+
+  /**
+   * 更新 AI 思考气泡文案
+   */
+  updateThinkingBubble(thinkingId: number, content: string): void {
+    const nextList: ChatMessage[] = this.chatList.map((item: ChatMessage): ChatMessage => {
+      if (item.id !== thinkingId) {
+        return item
+      }
+
+      const nextMessage: ChatMessage = {
+        id: item.id,
+        role: item.role,
+        content: content,
+        createTime: item.createTime
+      }
+
+      return nextMessage
+    })
+
+    this.chatList = nextList
+    this.scrollToBottom()
+  }
+
+  /**
+   * 停止 AI 思考气泡轮播定时器
+   */
+  stopThinkingTimer(): void {
+    if (this.thinkingTimer !== -1) {
+      clearInterval(this.thinkingTimer)
+      this.thinkingTimer = -1
+    }
+  }
+
+  /**
+   * 删除 AI 思考气泡
+   */
+  removeThinkingBubble(thinkingId: number): void {
+    this.stopThinkingTimer()
+
+    this.chatList = this.chatList.filter((item: ChatMessage): boolean => {
+      return item.id !== thinkingId
+    })
+
+    this.thinkingMessageId = 0
+    this.thinkingTextIndex = 0
+  }
+
+  /**
+   * 用真实消息替换 AI 思考气泡
+   */
+  replaceThinkingBubble(thinkingId: number, messages: ChatMessage[]): void {
+    this.stopThinkingTimer()
+
+    const nextList: ChatMessage[] = this.chatList.filter((item: ChatMessage): boolean => {
+      return item.id !== thinkingId
+    })
+
+    this.chatList = nextList.concat(messages)
+
+    this.thinkingMessageId = 0
+    this.thinkingTextIndex = 0
+  }
+
+  /**
+   * 生成 ForEach key
+   *
+   * 关键点：
+   * 普通消息 key 使用 id 即可。
+   * thinking 气泡的 content 会轮播变化，所以 key 要加 content。
+   * 否则 ArkUI 可能复用旧 ListItem，导致 UI 不刷新。
+   */
+  getMessageKey(item: ChatMessage): string {
+    if (item.id === this.thinkingMessageId) {
+      return `${item.id}-${item.content}`
+    }
+
+    return `${item.id}`
+  }
+
+  /**
    * 发送消息
    */
   async sendMessage(): Promise<void> {
     const content: string = this.inputValue.trim()
 
-    if (!content || this.isSending) {
+    if (!content || this.isSending || !this.isAuthReady) {
       return
     }
 
@@ -147,6 +278,9 @@ export struct Setting {
     await this.saveChatCache()
     this.scrollToBottom()
 
+    const thinkingId: number = this.startThinkingBubble()
+    const thinkingStartTime: number = Date.now()
+
     try {
       const requestParams: ChatRequest = {
         content: content
@@ -158,6 +292,12 @@ export struct Setting {
 
       const res = await sendChatMessage(requestParams)
 
+      const elapsed: number = Date.now() - thinkingStartTime
+
+      if (elapsed < this.minThinkingDuration) {
+        await this.wait(this.minThinkingDuration - elapsed)
+      }
+
       if (res.code !== 0) {
         const failNow: number = Date.now()
 
@@ -168,7 +308,7 @@ export struct Setting {
           createTime: failNow
         }
 
-        this.chatList = this.chatList.concat([failMessage])
+        this.replaceThinkingBubble(thinkingId, [failMessage])
         await this.saveChatCache()
         this.scrollToBottom()
         return
@@ -189,11 +329,17 @@ export struct Setting {
           return message
         })
 
-      this.chatList = this.chatList.concat(assistantMessages)
+      this.replaceThinkingBubble(thinkingId, assistantMessages)
       await this.saveChatCache()
       this.scrollToBottom()
     } catch (error) {
       console.error(`send message error: ${JSON.stringify(error)}`)
+
+      const elapsed: number = Date.now() - thinkingStartTime
+
+      if (elapsed < this.minThinkingDuration) {
+        await this.wait(this.minThinkingDuration - elapsed)
+      }
 
       const errorNow: number = Date.now()
 
@@ -204,10 +350,11 @@ export struct Setting {
         createTime: errorNow
       }
 
-      this.chatList = this.chatList.concat([errorMessage])
+      this.replaceThinkingBubble(thinkingId, [errorMessage])
       await this.saveChatCache()
       this.scrollToBottom()
     } finally {
+      this.stopThinkingTimer()
       this.isSending = false
     }
   }
@@ -339,7 +486,7 @@ export struct Setting {
           .margin({ bottom: 12 })
           .alignItems(VerticalAlign.Top)
         }
-      }, (item: ChatMessage) => `${item.id}`)
+      }, (item: ChatMessage) => this.getMessageKey(item))
 
       ListItem() {
         Row() {
