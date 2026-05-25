@@ -1,129 +1,50 @@
-import { HMRouter } from '@hadss/hmrouter'
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { KeyboardAvoidMode } from '@kit.ArkUI'
+import { common } from '@kit.AbilityKit'
+
 import { RouteConstants } from '../constants/RouteConstants'
 import { globalTabState } from '../stores/TabState'
-import { sendChatMessage, ChatMessageDTO, ChatRequest } from '../api/ChatApi'
-
-interface ChatItem {
-  id: number
-  role: 'user' | 'assistant'
-  content: string
-  createTime: number
-}
+import { ChatMessage } from '../models/ChatModel'
+import { ChatViewModel } from '../viewmodels/ChatViewModel'
+import { ChatController } from '../controllers/ChatController'
 
 @HMRouter({ pageUrl: RouteConstants.SETTING })
 @ComponentV2
 export struct Setting {
-  // 滚动示例：这里用 Scroller 控制 List 滚动到底部
   private listScroller: Scroller = new Scroller()
 
-  @Local inputValue: string = ''
-  @Local chatList: ChatItem[] = []
-  @Local isSending: boolean = false
-  @Local conversationId: number = 0
+  @Local viewModel: ChatViewModel = new ChatViewModel()
+
+  private chatController: ChatController = new ChatController(this.viewModel)
 
   aboutToAppear(): void {
     globalTabState.setCurrentTab(RouteConstants.SETTING)
 
-    // 键盘弹起时，页面整体 resize，避免底部输入框被键盘遮挡
     this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE)
+
+    const context = getContext(this) as common.UIAbilityContext
+
+    this.chatController.initAuth(
+      context,
+      () => {
+        HMRouterMgr.replace({
+          pageUrl: RouteConstants.LOGIN
+        })
+      },
+      () => {
+        this.scrollToBottom()
+      }
+    )
   }
 
-  /**
-   * 滚动到底部
-   *
-   * 注意：
-   * 1. chatList 变化后，List 需要一点时间完成重新渲染
-   * 2. 所以这里用 setTimeout 延迟执行滚动
-   * 3. this.chatList.length 对应底部占位 ListItem 的索引
-   */
+  aboutToDisappear(): void {
+    this.chatController.release()
+  }
+
   scrollToBottom(): void {
     setTimeout(() => {
-      this.listScroller.scrollToIndex(this.chatList.length)
+      this.listScroller.scrollToIndex(this.viewModel.chatList.length)
     }, 50)
-  }
-
-  /**
-   * 发送消息
-   *
-   * 当前流程：
-   * 1. 读取输入框内容
-   * 2. 先把用户消息追加到页面
-   * 3. 调用 Next.js 后端接口 POST /api/chat
-   * 4. 拿到后端返回的 assistant 消息
-   * 5. 把 assistant 消息追加到页面
-   */
-  async sendMessage(): Promise<void> {
-    const content = this.inputValue.trim()
-
-    if (!content || this.isSending) {
-      return
-    }
-
-    this.isSending = true
-    this.inputValue = ''
-
-    const now = Date.now()
-
-    const tempUserMessage: ChatItem = {
-      id: now,
-      role: 'user',
-      content,
-      createTime: now
-    }
-
-    this.chatList = this.chatList.concat([tempUserMessage])
-    this.scrollToBottom()
-
-    try {
-      const res = await sendChatMessage({
-        conversationId: this.conversationId || undefined,
-        content
-      })
-
-      if (res.code !== 0) {
-        const failMessage: ChatItem = {
-          id: Date.now(),
-          role: 'assistant',
-          content: res.message || '后端返回异常，请稍后重试。',
-          createTime: Date.now()
-        }
-
-        this.chatList = this.chatList.concat([failMessage])
-        this.scrollToBottom()
-        return
-      }
-
-      this.conversationId = res.data.conversationId
-
-      const assistantMessages: ChatItem[] = res.data.messages
-        .filter((item: ChatMessageDTO) => item.role === 'assistant')
-        .map((item: ChatMessageDTO) => {
-          const message: ChatItem = {
-            id: item.id,
-            role: item.role,
-            content: item.content,
-            createTime: item.createTime
-          }
-
-          return message
-        })
-
-      this.chatList = this.chatList.concat(assistantMessages)
-      this.scrollToBottom()
-    } catch (error) {
-      const errorMessage: ChatItem = {
-        id: Date.now(),
-        role: 'assistant',
-        content: '请求后端失败，请检查 Next.js 服务是否启动，以及接口地址是否正确。',
-        createTime: Date.now()
-      }
-
-      this.chatList = this.chatList.concat([errorMessage])
-      this.scrollToBottom()
-    } finally {
-      this.isSending = false
-    }
   }
 
   build() {
@@ -140,13 +61,59 @@ export struct Setting {
   @Builder
   Header() {
     Row() {
-      Text('聊天 Demo')
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#222222')
+      Column() {
+        Text('聊天 Demo')
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#222222')
+
+        if (this.viewModel.userInfo !== null) {
+          Text(`当前用户：${this.viewModel.userInfo.nickname}`)
+            .fontSize(12)
+            .fontColor('#999999')
+            .margin({ top: 2 })
+        } else {
+          Text('未登录')
+            .fontSize(12)
+            .fontColor('#999999')
+            .margin({ top: 2 })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+
+      Blank()
+
+      Row() {
+        Button('清空')
+          .height(32)
+          .fontSize(14)
+          .enabled(this.viewModel.chatList.length > 0 && !this.viewModel.isSending)
+          .onClick(() => {
+            const context = getContext(this) as common.UIAbilityContext
+            this.chatController.clearChatHistory(context)
+          })
+
+        Button('退出')
+          .height(32)
+          .fontSize(14)
+          .margin({ left: 8 })
+          .enabled(!this.viewModel.isSending)
+          .onClick(() => {
+            const context = getContext(this) as common.UIAbilityContext
+
+            this.chatController.logout(
+              context,
+              () => {
+                HMRouterMgr.replace({
+                  pageUrl: RouteConstants.LOGIN
+                })
+              }
+            )
+          })
+      }
     }
     .width('100%')
-    .height(56)
+    .height(64)
     .padding({ left: 16, right: 16 })
     .backgroundColor(Color.White)
     .alignItems(VerticalAlign.Center)
@@ -155,7 +122,26 @@ export struct Setting {
   @Builder
   MessageList() {
     List({ scroller: this.listScroller }) {
-      ForEach(this.chatList, (item: ChatItem) => {
+      if (this.viewModel.chatList.length === 0) {
+        ListItem() {
+          Column() {
+            Text('暂无聊天记录')
+              .fontSize(16)
+              .fontColor('#999999')
+
+            Text('输入内容后开始聊天')
+              .fontSize(13)
+              .fontColor('#BBBBBB')
+              .margin({ top: 8 })
+          }
+          .width('100%')
+          .height(240)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+        }
+      }
+
+      ForEach(this.viewModel.chatList, (item: ChatMessage) => {
         ListItem() {
           Row() {
             if (item.role === 'user') {
@@ -166,16 +152,30 @@ export struct Setting {
                 .fontColor(Color.White)
                 .backgroundColor('#1677FF')
                 .borderRadius(10)
-                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-                .constraintSize({ maxWidth: '75%' })
+                .padding({
+                  left: 12,
+                  right: 12,
+                  top: 8,
+                  bottom: 8
+                })
+                .constraintSize({
+                  maxWidth: '75%'
+                })
             } else {
               Text(item.content)
                 .fontSize(16)
                 .fontColor('#333333')
                 .backgroundColor(Color.White)
                 .borderRadius(10)
-                .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-                .constraintSize({ maxWidth: '75%' })
+                .padding({
+                  left: 12,
+                  right: 12,
+                  top: 8,
+                  bottom: 8
+                })
+                .constraintSize({
+                  maxWidth: '75%'
+                })
 
               Blank()
             }
@@ -184,9 +184,8 @@ export struct Setting {
           .margin({ bottom: 12 })
           .alignItems(VerticalAlign.Top)
         }
-      }, (item: ChatItem) => `${item.id}`)
+      }, (item: ChatMessage) => this.chatController.getMessageKey(item))
 
-      // 底部占位，防止最后一条消息贴着输入框
       ListItem() {
         Row() {
           Blank()
@@ -196,34 +195,55 @@ export struct Setting {
     }
     .layoutWeight(1)
     .width('100%')
-    .padding({ left: 12, right: 12, top: 12, bottom: 12 })
+    .padding({
+      left: 12,
+      right: 12,
+      top: 12,
+      bottom: 12
+    })
   }
 
   @Builder
   InputBar() {
     Row() {
-      TextInput({ placeholder: '请输入内容', text: this.inputValue })
+      TextInput({
+        placeholder: '请输入内容',
+        text: this.viewModel.inputValue
+      })
         .layoutWeight(1)
         .height(44)
         .backgroundColor(Color.White)
         .borderRadius(22)
-        .padding({ left: 14, right: 14 })
-        .enabled(!this.isSending)
+        .padding({
+          left: 14,
+          right: 14
+        })
+        .enabled(!this.viewModel.isSending && this.viewModel.isAuthReady)
         .onChange((value: string) => {
-          this.inputValue = value
+          this.viewModel.setInputValue(value)
         })
 
-      Button(this.isSending ? '发送中' : '发送')
+      Button(this.viewModel.isSending ? '发送中' : '发送')
         .height(44)
         .margin({ left: 10 })
-        .enabled(!this.isSending)
+        .enabled(!this.viewModel.isSending && this.viewModel.isAuthReady)
         .onClick(() => {
-          this.sendMessage()
+          const context = getContext(this) as common.UIAbilityContext
+
+          this.chatController.sendMessage(
+            context,
+            () => {
+              this.scrollToBottom()
+            }
+          )
         })
     }
     .width('100%')
     .height(64)
-    .padding({ left: 12, right: 12 })
+    .padding({
+      left: 12,
+      right: 12
+    })
     .backgroundColor(Color.White)
     .alignItems(VerticalAlign.Center)
   }
