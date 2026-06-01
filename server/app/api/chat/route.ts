@@ -1,61 +1,36 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 
-type ChatRequestBody = {
-  conversationId?: number
-  content?: string
-}
+const MOCK_REPLIES = [
+  '你好！有什么我可以帮助你的吗？',
+  '这是一个很好的问题，让我来解释一下。',
+  '根据你的描述，我建议你可以这样处理。',
+  '明白了，我来帮你分析一下这个情况。',
+  '好的，我已经收到你的消息了。'
+]
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json() as ChatRequestBody
+export async function POST(req: NextRequest) {
+  const { inputContent, sessionId } = await req.json()
 
-    const content = String(body.content || '').trim()
-    const conversationId = body.conversationId || Date.now()
-
-    if (!content) {
-      return NextResponse.json(
-        {
-          code: 400,
-          message: '消息内容不能为空'
-        },
-        {
-          status: 400
-        }
-      )
-    }
-
-    const now = Date.now()
-
+  if (!inputContent) {
     return NextResponse.json({
-      code: 0,
-      message: 'success',
-      data: {
-        conversationId,
-        messages: [
-          {
-            id: now,
-            role: 'user',
-            content,
-            createTime: now
-          },
-          {
-            id: now + 1,
-            role: 'assistant',
-            content: `这是 Next.js 后端返回的模拟回复：${content}`,
-            createTime: now + 1
-          }
-        ]
-      }
+      code: 400,
+      message: '消息内容不能为空',
+      data: null
     })
-  } catch {
-    return NextResponse.json(
-      {
-        code: 500,
-        message: '服务端解析请求失败'
-      },
-      {
-        status: 500
-      }
-    )
   }
+
+  const replyContent = MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)]
+
+  return NextResponse.json({
+    code: 200,
+    message: 'success',
+    data: {
+      id: randomUUID(),
+      role: 'assistant',
+      content: replyContent,
+      createTime: Date.now(),
+      sessionId: sessionId || randomUUID()
+    }
+  })
 }
