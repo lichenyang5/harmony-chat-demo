@@ -41,11 +41,7 @@ export struct ChatPage {
         .padding({ left: 8, right: 8 })
 
         // 消息列表
-        ChatListComp({
-          historyMessage: this.vm.historyMessage,
-          isLoading: this.vm.isLoading,
-          responseMessage: this.vm.responseMessage
-        })
+        ChatListComp({ vm: this.vm })
 
         // 底部输入框
         ChatInputComp({

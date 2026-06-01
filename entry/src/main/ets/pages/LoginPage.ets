@@ -1,12 +1,23 @@
 import { HMRouter } from '@hadss/hmrouter'
 import { AuthController } from '../controller/AuthController'
 import { AuthViewModel } from '../viewmodel/AuthViewModel'
+import { hasToken } from '../utils/AuthPersist'
+import { HMUtil } from '../utils/HMUtil'
 
 @HMRouter({ pageUrl: 'pages/Login' })
 @ComponentV2
 export struct Login {
   @Local vm: AuthViewModel = new AuthViewModel()
   @Local controller: AuthController = new AuthController(this.vm)
+
+  aboutToAppear(): void {
+    if (hasToken()) {
+      HMUtil.replace({
+        navigationId: 'MainNavigation',
+        pageUrl: 'pages/Chat'
+      })
+    }
+  }
 
   build() {
     Column({ space: 20 }) {
