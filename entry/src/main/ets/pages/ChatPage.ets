@@ -1,4 +1,4 @@
-import { HMRouter } from '@hadss/hmrouter'
+import { HMRouter, HMRouterMgr, HMParamType } from '@hadss/hmrouter'
 import { HMUtil } from '../utils/HMUtil'
 import { ChatController } from '../controller/ChatController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
@@ -6,6 +6,7 @@ import { ChatListComp } from '../components/ChatListComp'
 import { ChatInputComp } from '../components/ChatInputComp'
 import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
 import { route } from '../constants/HMConstants'
+import { ChatSession } from '../models/chatModel'
 
 @HMRouter({ pageUrl: route.PAGE_CHAT })
 @ComponentV2
@@ -17,6 +18,11 @@ export struct ChatPage {
   private mainWindow: window.Window | null = null
 
   aboutToAppear(): void {
+    const session = HMRouterMgr.getCurrentParam(HMParamType.routeParam) as ChatSession | null
+    if (session?.messages?.length) {
+      this.vm.historyMessage = session.messages
+      this.vm.sessionId = session.id
+    }
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
     } catch (_) {}

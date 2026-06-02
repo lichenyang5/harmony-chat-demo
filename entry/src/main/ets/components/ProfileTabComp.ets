@@ -3,9 +3,23 @@ import { route, NAV_ID } from '../constants/HMConstants'
 import { tabState } from '../viewmodel/AppTabState'
 import { clearAuth, getAuthPersist } from '../utils/AuthPersist'
 
+interface MenuItem {
+  label: string
+  action: () => void
+}
+
 @ComponentV2
 export struct ProfileTabComp {
-  private generalItems: string[] = ['消息记录', '帮助与反馈', '关于']
+  private menuItems: MenuItem[] = [
+    {
+      label: '消息记录',
+      action: () => {
+        HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: route.PAGE_CHAT_HISTORY })
+      }
+    },
+    { label: '帮助与反馈', action: () => {} },
+    { label: '关于', action: () => {} }
+  ]
 
   private logout(): void {
     // 1. 重置 Tab 下标（AppStorageV2 全局状态）
@@ -52,9 +66,9 @@ export struct ProfileTabComp {
 
       // 通用菜单
       Column() {
-        ForEach(this.generalItems, (item: string) => {
+        ForEach(this.menuItems, (item: MenuItem) => {
           Row() {
-            Text(item).fontSize(15)
+            Text(item.label).fontSize(15)
             Blank()
             Text('>').fontColor('#CCCCCC').fontSize(14)
           }
@@ -63,6 +77,7 @@ export struct ProfileTabComp {
           .padding({ left: 20, right: 20 })
           .border({ width: { bottom: 0.5 }, color: '#F5F5F5' })
           .backgroundColor(Color.White)
+          .onClick(() => { item.action() })
         })
       }
       .margin({ top: 12 })

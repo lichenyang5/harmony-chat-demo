@@ -4,6 +4,9 @@ import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
 import { WindowUtil } from '../utils/WindowUtil'
+import { saveSession } from '../utils/ChatPersist'
+import { ChatSession } from '../models/chatModel'
+import { common } from '@kit.AbilityKit'
 
 @ComponentV2
 export struct ChatTabComp {
@@ -13,6 +16,9 @@ export struct ChatTabComp {
   private mainWindow: window.Window | null = null
 
   aboutToAppear(): void {
+    // 每次进入 Tab 生成新会话 ID（时间戳，天然唯一）
+    this.vm.sessionId = Date.now().toString()
+
     /**
      * ⚠️ 关键：禁用系统默认键盘避让
      *
@@ -29,6 +35,15 @@ export struct ChatTabComp {
     this.initKeyboardListener()
   }
 
+  // 打字机动画结束时 pendingResponse 变回 ''，此时 AI 消息已推入 historyMessage
+  // Tabs 切换不触发 aboutToDisappear，所以在这里保存而不是在销毁时
+  @Monitor('vm.pendingResponse')
+  onResponseConsumed(): void {
+    if (this.vm.pendingResponse === '' && this.vm.historyMessage.length > 0) {
+      this.persistSession()
+    }
+  }
+
   aboutToDisappear(): void {
     // 恢复默认，避免影响其他页面（如 LoginPage 的表单）
     try {
@@ -38,6 +53,33 @@ export struct ChatTabComp {
       this.mainWindow?.off('keyboardHeightChange')
     } catch (_) {}
     this.mainWindow = null
+  }
+
+  private persistSession(): void {
+    if (this.vm.historyMessage.length === 0) return
+
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    if (!ctx) return
+
+    const messages = this.vm.historyMessage
+    // 标题：第一条用户消息前 20 字，没有就用「新对话」
+    const firstUser = messages.find(m => m.role === 'user')
+    const title = firstUser
+      ? firstUser.content.substring(0, 20) + (firstUser.content.length > 20 ? '...' : '')
+      : '新对话'
+    // 预览：最后一条消息前 30 字
+    const last = messages[messages.length - 1]
+    const preview = last.content.substring(0, 30) + (last.content.length > 30 ? '...' : '')
+
+    const session: ChatSession = {
+      id: this.vm.sessionId,
+      title,
+      preview,
+      createTime: messages[0].createTime,
+      updateTime: last.createTime,
+      messages
+    }
+    saveSession(ctx, session)
   }
 
   private async initKeyboardListener(): Promise<void> {
@@ -96,5 +138,6 @@ export struct ChatTabComp {
       ? Math.max(0, this.keyboardHeight - 56 - WindowUtil.getBottomAvoidHeight())
       : 0
     })
+    .expandSafeArea([SafeAreaType.KEYBOARD], [SafeAreaEdge.BOTTOM])
   }
 }
