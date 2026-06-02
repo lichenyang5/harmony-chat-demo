@@ -3,8 +3,9 @@ import { AuthController } from '../controller/AuthController'
 import { AuthViewModel } from '../viewmodel/AuthViewModel'
 import { hasToken } from '../utils/AuthPersist'
 import { HMUtil } from '../utils/HMUtil'
+import { route } from '../constants/HMConstants'
 
-@HMRouter({ pageUrl: 'pages/Login' })
+@HMRouter({ pageUrl: route.PAGE_LOGIN })
 @ComponentV2
 export struct Login {
   @Local vm: AuthViewModel = new AuthViewModel()
@@ -14,7 +15,7 @@ export struct Login {
     if (hasToken()) {
       HMUtil.replace({
         navigationId: 'MainNavigation',
-        pageUrl: 'pages/Chat'
+        pageUrl: route.PAGE_HOME
       })
     }
   }

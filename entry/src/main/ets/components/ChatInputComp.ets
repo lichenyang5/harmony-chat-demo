@@ -20,7 +20,5 @@ export struct ChatInputComp {
     .width('100%')
     .padding(12)
     .backgroundColor('#FFFFFF')
-    // 键盘弹出时输入框跟着上移，不被遮住
-    .expandSafeArea([SafeAreaType.KEYBOARD], [SafeAreaEdge.BOTTOM])
   }
 }

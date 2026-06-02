@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { SameRouteInterceptor } from '../interceptors/SameRouteInterceptor'
+import { WindowUtil } from '../utils/WindowUtil'
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
@@ -32,12 +33,15 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
 
-    windowStage.loadContent('pages/Index', (err) => {
+    windowStage.loadContent('pages/Index', async (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+      // 页面加载完成后立即读取安全区高度并存入 AppStorage
+      const lastWindow = await windowStage.getMainWindow()
+      WindowUtil.init(lastWindow)
     });
   }
 
