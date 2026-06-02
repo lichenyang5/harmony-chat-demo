@@ -4,7 +4,7 @@ import { ChatController } from '../controller/ChatController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from '../components/ChatListComp'
 import { ChatInputComp } from '../components/ChatInputComp'
-import { window, display } from '@kit.ArkUI'
+import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
 import { route } from '../constants/HMConstants'
 
 @HMRouter({ pageUrl: route.PAGE_CHAT })
@@ -17,10 +17,16 @@ export struct ChatPage {
   private mainWindow: window.Window | null = null
 
   aboutToAppear(): void {
+    try {
+      this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
+    } catch (_) {}
     this.initKeyboardListener()
   }
 
   aboutToDisappear(): void {
+    try {
+      this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
+    } catch (_) {}
     try {
       this.mainWindow?.off('keyboardHeightChange')
     } catch (_) {}
