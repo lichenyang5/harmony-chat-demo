@@ -3,6 +3,7 @@ import { ChatController } from '../controller/ChatController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
+import { WindowUtil } from '../utils/WindowUtil'
 
 @ComponentV2
 export struct ChatTabComp {
@@ -82,8 +83,18 @@ export struct ChatTabComp {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.White)
-    // NONE 模式下系统不动，Column.padding.bottom 独自承担键盘避让
-    // layoutWeight(1) 的 ChatListComp 自动收缩，输入框紧贴键盘顶部
-    .padding({ bottom: this.keyboardHeight })
+    /**
+     * keyboardHeight 是从屏幕最底部算起的键盘高度（包含 Tab Bar 区域）
+     * 但 ChatTabComp 的 Column 只占 TabContent 高度（不含 Tab Bar）
+     *
+     * 错误：padding.bottom = keyboardHeight        → 多减了 tabBarHeight，留出空隙
+     * 正确：padding.bottom = keyboardHeight - tabBarHeight  → 精准对齐键盘顶部
+     *
+     * tabBarHeight = 固定内容区 56 + 手势条 bottomAvoid
+     */
+    .padding({ bottom: this.keyboardHeight > 0
+      ? Math.max(0, this.keyboardHeight - 56 - WindowUtil.getBottomAvoidHeight())
+      : 0
+    })
   }
 }
