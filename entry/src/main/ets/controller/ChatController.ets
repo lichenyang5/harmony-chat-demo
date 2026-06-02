@@ -34,33 +34,12 @@ export class ChatController {
     this.biz.sendMessage(content, this.vm.sessionId || undefined)
       .then((result) => {
         this.vm.isLoading = false
-
         if (!result) {
           return
         }
-
-        // 5. 更新 sessionId
+        // 5. 更新 sessionId，把完整响应交给组件处理打字机
         this.vm.sessionId = result.sessionId
-
-        // 6. 打字机效果输出响应内容
-        const fullText = result.content
-        let index = 0
-        const timer = setInterval(() => {
-          this.vm.responseMessage += fullText[index]
-          index++
-          if (index >= fullText.length) {
-            clearInterval(timer)
-
-            // 7. 打完后推入历史记录，清空临时响应
-            const aiMessage = new ChatMessage()
-            aiMessage.id = result.id
-            aiMessage.role = 'assistant'
-            aiMessage.content = fullText
-            aiMessage.createTime = result.createTime
-            this.vm.historyMessage.push(aiMessage)
-            this.vm.responseMessage = ''
-          }
-        }, 30)
+        this.vm.pendingResponse = result.content
       })
       .catch(() => {
         this.vm.isLoading = false

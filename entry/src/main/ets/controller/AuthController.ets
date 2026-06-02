@@ -1,6 +1,9 @@
 import { AuthBiz } from '../biz/AuthBiz'
 import { LoginRequest } from '../models/userModel'
 import { AuthViewModel } from '../viewmodel/AuthViewModel'
+import { HMUtil } from '../utils/HMUtil'
+import { saveAuth } from '../utils/AuthPersist'
+import { route } from '../constants/HMConstants'
 
 export class AuthController {
   private biz: AuthBiz = new AuthBiz()
@@ -31,6 +34,11 @@ export class AuthController {
         this.vm.userInfo = result
         this.vm.isLogin = true
         this.vm.password = ''
+        saveAuth(result.token, result.userName, result.userId)
+        HMUtil.replace({
+          navigationId: 'MainNavigation',
+          pageUrl: route.PAGE_HOME
+        })
       })
       .catch(() => {
         this.vm.isLoading = false

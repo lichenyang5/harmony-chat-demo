@@ -4,19 +4,58 @@ import { ChatController } from '../controller/ChatController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from '../components/ChatListComp'
 import { ChatInputComp } from '../components/ChatInputComp'
+import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
+import { route } from '../constants/HMConstants'
 
-@HMRouter({ pageUrl: 'pages/Chat' })
+@HMRouter({ pageUrl: route.PAGE_CHAT })
 @ComponentV2
 export struct ChatPage {
   @Local vm: ChatViewModel = new ChatViewModel()
   @Local controller: ChatController = new ChatController(this.vm)
   @Local showDrawer: boolean = false
+  @Local keyboardHeight: number = 0
+  private mainWindow: window.Window | null = null
+
+  aboutToAppear(): void {
+    try {
+      this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
+    } catch (_) {}
+    this.initKeyboardListener()
+  }
+
+  aboutToDisappear(): void {
+    try {
+      this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
+    } catch (_) {}
+    try {
+      this.mainWindow?.off('keyboardHeightChange')
+    } catch (_) {}
+    this.mainWindow = null
+  }
+
+  private async initKeyboardListener(): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext()
+      if (!ctx) return
+      const win = await window.getLastWindow(ctx)
+      this.mainWindow = win
+      win.on('keyboardHeightChange', (heightPx: number) => {
+        const heightVp = heightPx > 0
+          ? heightPx / display.getDefaultDisplaySync().densityPixels
+          : 0
+        this.getUIContext().animateTo(
+          { duration: heightPx > 0 ? 300 : 250, curve: Curve.EaseOut },
+          () => { this.keyboardHeight = heightVp }
+        )
+      })
+    } catch (e) {
+      console.error('[ChatPage] keyboard listener failed', JSON.stringify(e))
+    }
+  }
 
   build() {
-    // Stack 作为唯一根节点，抽屉叠在内容上方
     Stack({ alignContent: Alignment.TopEnd }) {
 
-      // 主内容区
       Column() {
         // 顶部栏
         Row() {
@@ -40,14 +79,10 @@ export struct ChatPage {
         .height(56)
         .padding({ left: 8, right: 8 })
 
-        // 消息列表
-        ChatListComp({
-          historyMessage: this.vm.historyMessage,
-          isLoading: this.vm.isLoading,
-          responseMessage: this.vm.responseMessage
-        })
+        // ✅ layoutWeight(1)：撑满剩余高度，键盘弹起时自动收缩
+        ChatListComp({ vm: this.vm })
+          .layoutWeight(1)
 
-        // 底部输入框
         ChatInputComp({
           inputContent: this.vm.inputContent,
           onInputChange: (val: string) => { this.vm.inputContent = val },
@@ -57,8 +92,10 @@ export struct ChatPage {
       .width('100%')
       .height('100%')
       .backgroundColor('#FFFFFF')
+      // ✅ 键盘避让：Column 底部 padding = 键盘高度，内容整体上移
+      .padding({ bottom: this.keyboardHeight })
 
-      // 历史记录抽屉（叠在右侧）
+      // 历史记录抽屉
       if (this.showDrawer) {
         Column() {
           Row() {
