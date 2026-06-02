@@ -18,7 +18,7 @@ export struct ChatInputComp {
         .enabled(this.inputContent.trim().length > 0)
     }
     .width('100%')
-    .padding(12)
+    .padding({ left: 12, right: 12, top: 12, bottom: 0 })
     .backgroundColor('#FFFFFF')
   }
 }
