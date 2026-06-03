@@ -1,0 +1,165 @@
+import { HMRouter, HMRouterMgr,HMLifecycleState } from '@hadss/hmrouter'
+import { common } from '@kit.AbilityKit'
+import { ChatSession } from '../models/chatModel'
+import { loadSessions, deleteSession } from '../utils/ChatPersist'
+import { route, NAV_ID } from '../constants/HMConstants'
+import { HMUtil } from '../utils/HMUtil'
+
+@HMRouter({
+  pageUrl: route.PAGE_CHAT_HISTORY,
+  interceptors: ['AuthInterceptor']   // ← 通过 interceptorName 字符串引用
+})
+@ComponentV2
+export struct ChatHistoryPage {
+  @Local sessions: ChatSession[] = []
+  private ctx: common.UIAbilityContext | null = null
+
+  aboutToAppear(): void {
+    this.ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    this.loadData()
+
+    // 注册 onShown：每次页面被显示（包括从 ChatPage pop 回来）触发
+    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(
+      HMLifecycleState.onShown,
+      () => {
+        console.log('[ChatHistoryPage] onShown 触发，刷新列表')
+        this.loadData()
+      }
+    )
+  }
+
+  private loadData(): void {
+    if (!this.ctx) return
+    this.sessions = loadSessions(this.ctx)
+  }
+
+  private onDelete(sessionId: string): void {
+    if (!this.ctx) return
+    deleteSession(this.ctx, sessionId)
+    // 直接从本地列表移除，不需要重新读文件
+    this.sessions = this.sessions.filter(s => s.id !== sessionId)
+  }
+
+  private formatTime(ms: number): string {
+    const d = new Date(ms)
+    const now = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    if (isToday) {
+      // 今天：只显示时分
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    }
+    // 其他：显示月/日
+    return `${d.getMonth() + 1}/${d.getDate()}`
+  }
+
+  build() {
+    Column() {
+
+      // 顶部导航栏
+      Row() {
+        Text('←')
+          .fontSize(22)
+          .padding(12)
+          .onClick(() => { HMUtil.pop() })
+        Text('消息记录').fontSize(17).fontWeight(FontWeight.Medium)
+        Blank()
+      }
+      .width('100%')
+      .height(56)
+      .backgroundColor(Color.White)
+      .border({ width: { bottom: 0.5 }, color: '#EBEBEB' })
+
+      if (this.sessions.length === 0) {
+        // 空状态
+        Column({ space: 12 }) {
+          Text('💬').fontSize(48)
+          Text('暂无对话记录').fontSize(15).fontColor('#AAAAAA')
+          Text('去 AI 助手 Tab 开始聊天吧').fontSize(13).fontColor('#CCCCCC')
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+
+      } else {
+        // 历史会话列表
+        List() {
+          ForEach(this.sessions, (session: ChatSession) => {
+            ListItem() {
+              Row({ space: 12 }) {
+                // 头像（取标题第一个字）
+                Text(session.title.charAt(0))
+                  .width(44)
+                  .height(44)
+                  .fontSize(18)
+                  .fontColor(Color.White)
+                  .textAlign(TextAlign.Center)
+                  .backgroundColor('#007DFF')
+                  .borderRadius(22)
+                  .flexShrink(0)
+
+                Column({ space: 4 }) {
+                  Row() {
+                    Text(session.title)
+                      .fontSize(15)
+                      .fontWeight(FontWeight.Medium)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .layoutWeight(1)
+                    Text(this.formatTime(session.updateTime))
+                      .fontSize(12)
+                      .fontColor('#AAAAAA')
+                  }
+                  .width('100%')
+
+                  Text(session.preview)
+                    .fontSize(13)
+                    .fontColor('#888888')
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .layoutWeight(1)
+                .alignItems(HorizontalAlign.Start)
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+              .backgroundColor(Color.White)
+            }
+            // swipeAction：左滑显示删除按钮（鸿蒙 ListItem 内置手势）
+            .swipeAction({
+              end: this.deleteButton(session.id)
+            })
+            .onClick(() => {
+              // 点击进入历史会话（只读模式，后续可扩展继续对话）
+              HMRouterMgr.push({
+                navigationId: NAV_ID,
+                pageUrl: route.PAGE_CHAT,
+                param: session   // 把 session 传给 ChatPage，让它加载历史消息
+              })
+            })
+          })
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .divider({ strokeWidth: 0.5, color: '#F5F5F5', startMargin: 72 })
+      }
+
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#F5F7FA')
+  }
+
+  // 左滑删除按钮（@Builder 必须用箭头函数，避免 this 丢失）
+  @Builder
+  deleteButton(sessionId: string) {
+    Button('删除')
+      .width(72)
+      .height('100%')
+      .fontSize(14)
+      .backgroundColor('#FF4D4F')
+      .fontColor(Color.White)
+      .borderRadius(0)
+      .onClick(() => { this.onDelete(sessionId) })
+  }
+}

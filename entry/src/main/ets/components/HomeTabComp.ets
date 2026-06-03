@@ -1,12 +1,13 @@
 import { HMRouterMgr, HMPopInfo } from '@hadss/hmrouter'
 import { route, NAV_ID } from '../constants/HMConstants'
 import { Product, MOCK_PRODUCTS } from '../models/productModel'
-
+import { AuthPersist } from '../utils/AuthPersist'
 @ComponentV2
 export struct HomeTabComp {
   // 购物车总数：由 ProductDetailPage pop 返回的 onResult 累加
   @Local cartCount: number = 0
-
+  // consumer获取父组件provider的变量
+  @Consumer() auth: AuthPersist = new AuthPersist()   // ← 新增，默认值兜底
   // 点击商品卡片 → push 传参 → 等待 onResult 拿回加购数量
   private goDetail(product: Product): void {
     HMRouterMgr.push(
@@ -76,10 +77,20 @@ export struct HomeTabComp {
 
   build() {
     Column() {
-      // 顶部栏：标题 + 购物车角标
+      // 顶部栏：欢迎语 + 标题 + 购物车角标
       Row() {
-        Text('精选课程').fontSize(20).fontWeight(FontWeight.Bold)
+        Column({ space: 2 }) {
+          Text(this.auth.userName ? `你好，${this.auth.userName}` : '你好，游客')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+          Text('欢迎来到精选课程')
+            .fontSize(12)
+            .fontColor('#888888')
+        }
+        .alignItems(HorizontalAlign.Start)
+
         Blank()
+
         Stack({ alignContent: Alignment.TopEnd }) {
           Text('🛒').fontSize(24)
           if (this.cartCount > 0) {

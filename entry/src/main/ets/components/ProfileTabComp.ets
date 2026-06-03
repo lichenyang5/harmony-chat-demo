@@ -1,11 +1,26 @@
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { route, NAV_ID } from '../constants/HMConstants'
 import { tabState } from '../viewmodel/AppTabState'
-import { clearAuth, getAuthPersist } from '../utils/AuthPersist'
+import { clearAuth, AuthPersist } from '../utils/AuthPersist'
+
+interface MenuItem {
+  label: string
+  action: () => void
+}
 
 @ComponentV2
 export struct ProfileTabComp {
-  private generalItems: string[] = ['消息记录', '帮助与反馈', '关于']
+  @Consumer() auth: AuthPersist = new AuthPersist()   // ← 新增
+  private menuItems: MenuItem[] = [
+    {
+      label: '消息记录',
+      action: () => {
+        HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: route.PAGE_CHAT_HISTORY })
+      }
+    },
+    { label: '帮助与反馈', action: () => {} },
+    { label: '关于', action: () => {} }
+  ]
 
   private logout(): void {
     // 1. 重置 Tab 下标（AppStorageV2 全局状态）
@@ -13,7 +28,7 @@ export struct ProfileTabComp {
     // 2. 清除持久化 token（PersistenceV2）
     clearAuth()
     // 3. replace 到登录页（不保留回退栈，用户无法返回首页）
-    HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
+    // HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
   }
 
   build() {
@@ -22,7 +37,7 @@ export struct ProfileTabComp {
       // 用户信息区
       Column({ space: 10 }) {
         // 头像
-        Text(getAuthPersist().userName ? getAuthPersist().userName.charAt(0).toUpperCase() : 'U')
+        Text(this.auth.userName ? this.auth.userName.charAt(0).toUpperCase() : 'U')
           .width(72)
           .height(72)
           .fontSize(28)
@@ -33,8 +48,8 @@ export struct ProfileTabComp {
           .borderRadius(36)
           .margin({ top: 40 })
 
-        // 用户名（从 PersistenceV2 读取）
-        Text(getAuthPersist().userName || '用户')
+        // 用户名（从 Provider 读取）
+        Text(this.auth.userName || '用户')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
 
@@ -52,9 +67,9 @@ export struct ProfileTabComp {
 
       // 通用菜单
       Column() {
-        ForEach(this.generalItems, (item: string) => {
+        ForEach(this.menuItems, (item: MenuItem) => {
           Row() {
-            Text(item).fontSize(15)
+            Text(item.label).fontSize(15)
             Blank()
             Text('>').fontColor('#CCCCCC').fontSize(14)
           }
@@ -63,21 +78,34 @@ export struct ProfileTabComp {
           .padding({ left: 20, right: 20 })
           .border({ width: { bottom: 0.5 }, color: '#F5F5F5' })
           .backgroundColor(Color.White)
+          .onClick(() => { item.action() })
         })
       }
       .margin({ top: 12 })
 
       Blank()
 
-      // 退出登录
-      Button('退出登录')
-        .width('90%')
-        .height(48)
-        .backgroundColor('#FFF1F0')
-        .fontColor('#FF4D4F')
-        .border({ width: 1, color: '#FFCCC7' })
-        .margin({ bottom: 40 })
-        .onClick(() => { this.logout() })
+      // 退出登录 / 去登录
+      if (this.auth.token.length > 0) {
+        Button('退出登录')
+          .width('90%')
+          .height(48)
+          .backgroundColor('#FFF1F0')
+          .fontColor('#FF4D4F')
+          .border({ width: 1, color: '#FFCCC7' })
+          .margin({ bottom: 40 })
+          .onClick(() => { this.logout() })
+      } else {
+        Button('去登录')
+          .width('90%')
+          .height(48)
+          .backgroundColor('#007DFF')
+          .fontColor(Color.White)
+          .margin({ bottom: 40 })
+          .onClick(() => {
+            HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
+          })
+      }
     }
     .width('100%')
     .height('100%')
