@@ -1,7 +1,7 @@
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { route, NAV_ID } from '../constants/HMConstants'
 import { tabState } from '../viewmodel/AppTabState'
-import { clearAuth, getAuthPersist } from '../utils/AuthPersist'
+import { clearAuth, AuthPersist } from '../utils/AuthPersist'
 
 interface MenuItem {
   label: string
@@ -10,6 +10,7 @@ interface MenuItem {
 
 @ComponentV2
 export struct ProfileTabComp {
+  @Consumer() auth: AuthPersist = new AuthPersist()   // ← 新增
   private menuItems: MenuItem[] = [
     {
       label: '消息记录',
@@ -36,7 +37,7 @@ export struct ProfileTabComp {
       // 用户信息区
       Column({ space: 10 }) {
         // 头像
-        Text(getAuthPersist().userName ? getAuthPersist().userName.charAt(0).toUpperCase() : 'U')
+        Text(this.auth.userName ? this.auth.userName.charAt(0).toUpperCase() : 'U')
           .width(72)
           .height(72)
           .fontSize(28)
@@ -47,8 +48,8 @@ export struct ProfileTabComp {
           .borderRadius(36)
           .margin({ top: 40 })
 
-        // 用户名（从 PersistenceV2 读取）
-        Text(getAuthPersist().userName || '用户')
+        // 用户名（从 Provider 读取）
+        Text(this.auth.userName || '用户')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
 
@@ -85,7 +86,7 @@ export struct ProfileTabComp {
       Blank()
 
       // 退出登录 / 去登录
-      if (getAuthPersist().token.length > 0) {
+      if (this.auth.token.length > 0) {
         Button('退出登录')
           .width('90%')
           .height(48)

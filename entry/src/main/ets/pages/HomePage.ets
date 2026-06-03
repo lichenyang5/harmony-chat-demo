@@ -6,7 +6,7 @@ import { ChatTabComp } from '../components/ChatTabComp'
 import { ProfileTabComp } from '../components/ProfileTabComp'
 import { route } from '../constants/HMConstants'
 import { WindowUtil } from '../utils/WindowUtil'
-
+import { AuthPersist, getAuthPersist } from '../utils/AuthPersist'
 @HMRouter({ pageUrl: route.PAGE_HOME })
 @ComponentV2
 export struct HomePage {
@@ -19,7 +19,10 @@ export struct HomePage {
    * 由 WindowUtil.init() 在 EntryAbility 里写入 AppStorage
    */
   @Local bottomAvoid: number = WindowUtil.getBottomAvoidHeight()
-
+  /*
+   * provider 爷孙组件 provider注册,子组件consumer获取
+   * */
+  @Provider() auth: AuthPersist = getAuthPersist()   // ← 新增
   @Builder
   tabBarItem(index: number, label: string, icon: string) {
     Column({ space: 4 }) {
