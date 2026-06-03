@@ -1,11 +1,14 @@
-import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
+import { HMRouter, HMRouterMgr,HMLifecycleState } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
 import { loadSessions, deleteSession } from '../utils/ChatPersist'
 import { route, NAV_ID } from '../constants/HMConstants'
 import { HMUtil } from '../utils/HMUtil'
 
-@HMRouter({ pageUrl: route.PAGE_CHAT_HISTORY })
+@HMRouter({
+  pageUrl: route.PAGE_CHAT_HISTORY,
+  interceptors: ['AuthInterceptor']   // ← 通过 interceptorName 字符串引用
+})
 @ComponentV2
 export struct ChatHistoryPage {
   @Local sessions: ChatSession[] = []
@@ -14,6 +17,15 @@ export struct ChatHistoryPage {
   aboutToAppear(): void {
     this.ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
     this.loadData()
+
+    // 注册 onShown：每次页面被显示（包括从 ChatPage pop 回来）触发
+    HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(
+      HMLifecycleState.onShown,
+      () => {
+        console.log('[ChatHistoryPage] onShown 触发，刷新列表')
+        this.loadData()
+      }
+    )
   }
 
   private loadData(): void {

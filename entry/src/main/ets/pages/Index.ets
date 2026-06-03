@@ -7,7 +7,7 @@ export struct Index {
     Column() {
       HMNavigation({
         navigationId: 'MainNavigation',
-        homePageUrl: 'pages/Login',
+        homePageUrl: 'pages/Home',   // ← Login 改成 Home
         options: {}
       })
     }

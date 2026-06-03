@@ -1,4 +1,8 @@
 {
-  "scanDir": ["src/main/ets/pages"],
+  "scanDir": [
+    "src/main/ets/pages",
+    "src/main/ets/dialogs",
+    "src/main/ets/interceptors"
+  ],
   "saveGeneratedFile": true
 }

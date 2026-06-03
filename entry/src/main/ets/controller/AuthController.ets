@@ -35,10 +35,7 @@ export class AuthController {
         this.vm.isLogin = true
         this.vm.password = ''
         saveAuth(result.token, result.userName, result.userId)
-        HMUtil.replace({
-          navigationId: 'MainNavigation',
-          pageUrl: route.PAGE_HOME
-        })
+        HMUtil.pop() // ← 改成 pop（已登录回到上一页，不再 replace 到 Home）
       })
       .catch(() => {
         this.vm.isLoading = false

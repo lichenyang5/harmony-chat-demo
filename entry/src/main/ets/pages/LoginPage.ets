@@ -13,10 +13,7 @@ export struct Login {
 
   aboutToAppear(): void {
     if (hasToken()) {
-      HMUtil.replace({
-        navigationId: 'MainNavigation',
-        pageUrl: route.PAGE_HOME
-      })
+      HMUtil.pop()   // ← 改成 pop（已登录回到上一页，不再 replace 到 Home）
     }
   }
 

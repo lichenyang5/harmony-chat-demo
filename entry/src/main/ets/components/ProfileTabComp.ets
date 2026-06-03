@@ -27,7 +27,7 @@ export struct ProfileTabComp {
     // 2. 清除持久化 token（PersistenceV2）
     clearAuth()
     // 3. replace 到登录页（不保留回退栈，用户无法返回首页）
-    HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
+    // HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
   }
 
   build() {
@@ -84,15 +84,27 @@ export struct ProfileTabComp {
 
       Blank()
 
-      // 退出登录
-      Button('退出登录')
-        .width('90%')
-        .height(48)
-        .backgroundColor('#FFF1F0')
-        .fontColor('#FF4D4F')
-        .border({ width: 1, color: '#FFCCC7' })
-        .margin({ bottom: 40 })
-        .onClick(() => { this.logout() })
+      // 退出登录 / 去登录
+      if (getAuthPersist().token.length > 0) {
+        Button('退出登录')
+          .width('90%')
+          .height(48)
+          .backgroundColor('#FFF1F0')
+          .fontColor('#FF4D4F')
+          .border({ width: 1, color: '#FFCCC7' })
+          .margin({ bottom: 40 })
+          .onClick(() => { this.logout() })
+      } else {
+        Button('去登录')
+          .width('90%')
+          .height(48)
+          .backgroundColor('#007DFF')
+          .fontColor(Color.White)
+          .margin({ bottom: 40 })
+          .onClick(() => {
+            HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
+          })
+      }
     }
     .width('100%')
     .height('100%')
