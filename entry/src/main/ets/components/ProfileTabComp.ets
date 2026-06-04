@@ -3,7 +3,7 @@ import { HMRouterMgr } from '@hadss/hmrouter'
 import { NAV_ID } from 'common'
 import { tabState } from '../viewmodel/AppTabState'
 import { clearAuth, AuthPersist } from '../utils/AuthPersist'
-import { getThemeState,ThemeState } from '../viewmodel/ThemeState'
+import { ThemeState } from '../viewmodel/ThemeState'
 
 interface MenuItem {
   label: string
@@ -12,31 +12,55 @@ interface MenuItem {
 
 @ComponentV2
 export struct ProfileTabComp {
-  @Consumer() auth: AuthPersist = new AuthPersist()   // ← 新增
-  @Local ThemeState:ThemeState = getThemeState()
+  @Consumer() auth: AuthPersist = new AuthPersist()
+  @Consumer() theme: ThemeState = new ThemeState()
+
   private menuItems: MenuItem[] = [
     {
       label: '消息记录',
       action: () => {
-        HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_CHAT_HISTORY })
+        HMRouterMgr.push({
+          navigationId: NAV_ID,
+          pageUrl: EntryRoutes.PAGE_CHAT_HISTORY
+        })
       }
     },
-    { label: '帮助与反馈', action: () => {} },
-    { label: '关于', action: () => {} }
+    {
+      label: '帮助与反馈',
+      action: () => {}
+    },
+    {
+      label: '关于',
+      action: () => {}
+    }
   ]
 
   private logout(): void {
-    // 1. 重置 Tab 下标（AppStorageV2 全局状态）
+    // 1. 重置 Tab 下标
     tabState.currentIndex = 0
-    // 2. 清除持久化 token（PersistenceV2）
+
+    // 2. 清除持久化 token
     clearAuth()
-    // 3. replace 到登录页（不保留回退栈，用户无法返回首页）
+
+    // 3. 当前逻辑是留在首页，通过 auth 状态切换成“去登录”
     // HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_LOGIN })
+  }
+
+  @Builder
+  themeSwitchButton() {
+    Button(this.theme.isDark ? '白天模式' : '夜间模式')
+      .width('90%')
+      .height(44)
+      .backgroundColor(this.theme.secondaryButtonBg)
+      .fontColor(this.theme.secondaryButtonText)
+      .margin({ top: 20, bottom: 12 })
+      .onClick(() => {
+        this.theme.isDark = !this.theme.isDark
+      })
   }
 
   build() {
     Column() {
-
       // 用户信息区
       Column({ space: 10 }) {
         // 头像
@@ -44,84 +68,90 @@ export struct ProfileTabComp {
           .width(72)
           .height(72)
           .fontSize(28)
-          .fontColor(Color.White)
+          .fontColor(this.theme.onPrimary)
           .fontWeight(FontWeight.Bold)
           .textAlign(TextAlign.Center)
-          .backgroundColor('#007DFF')
+          .backgroundColor(this.theme.primary)
           .borderRadius(36)
           .margin({ top: 40 })
 
-        // 用户名（从 Provider 读取）
+        // 用户名
         Text(this.auth.userName || '用户')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
+          .fontColor(this.theme.textPrimary)
 
         // 演示 AppStorageV2：当前 Tab 下标
         Text(`AppStorageV2 · currentIndex = ${tabState.currentIndex}`)
           .fontSize(11)
-          .fontColor('#AAAAAA')
+          .fontColor(this.theme.textTertiary)
           .margin({ bottom: 8 })
       }
       .width('100%')
       .alignItems(HorizontalAlign.Center)
       .padding({ bottom: 20 })
-      .border({ width: { bottom: 0.5 }, color: '#F0F0F0' })
-      .backgroundColor(Color.White)
+      .border({ width: { bottom: 0.5 }, color: this.theme.border })
+      .backgroundColor(this.theme.surface)
 
       // 通用菜单
       Column() {
         ForEach(this.menuItems, (item: MenuItem) => {
           Row() {
-            Text(item.label).fontSize(15)
+            Text(item.label)
+              .fontSize(15)
+              .fontColor(this.theme.textPrimary)
+
             Blank()
-            Text('>').fontColor('#CCCCCC').fontSize(14)
+
+            Text('>')
+              .fontColor(this.theme.textTertiary)
+              .fontSize(14)
           }
           .width('100%')
           .height(52)
           .padding({ left: 20, right: 20 })
-          .border({ width: { bottom: 0.5 }, color: '#F5F5F5' })
-          .backgroundColor(Color.White)
-          .onClick(() => { item.action() })
+          .border({ width: { bottom: 0.5 }, color: this.theme.divider })
+          .backgroundColor(this.theme.surface)
+          .onClick(() => {
+            item.action()
+          })
         })
       }
       .margin({ top: 12 })
 
       Blank()
-      if(this.ThemeState.isDark){
-        Button('白天模式')
-          .onClick(()=>{
-            this.ThemeState.isDark=false
-          })
-      }else{
-        Button('夜间模式')
-          .onClick(()=>{
-            this.ThemeState.isDark=true
-          })
-      }
+
+      this.themeSwitchButton()
+
       // 退出登录 / 去登录
       if (this.auth.token.length > 0) {
         Button('退出登录')
           .width('90%')
           .height(48)
-          .backgroundColor('#FFF1F0')
-          .fontColor('#FF4D4F')
-          .border({ width: 1, color: '#FFCCC7' })
+          .backgroundColor(this.theme.dangerBg)
+          .fontColor(this.theme.danger)
+          .border({ width: 1, color: this.theme.dangerBorder })
           .margin({ bottom: 40 })
-          .onClick(() => { this.logout() })
+          .onClick(() => {
+            this.logout()
+          })
       } else {
         Button('去登录')
           .width('90%')
           .height(48)
-          .backgroundColor('#007DFF')
-          .fontColor(Color.White)
+          .backgroundColor(this.theme.primary)
+          .fontColor(this.theme.onPrimary)
           .margin({ bottom: 40 })
           .onClick(() => {
-            HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_LOGIN })
+            HMRouterMgr.push({
+              navigationId: NAV_ID,
+              pageUrl: EntryRoutes.PAGE_LOGIN
+            })
           })
       }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F7FA')
+    .backgroundColor(this.theme.bg)
   }
 }
