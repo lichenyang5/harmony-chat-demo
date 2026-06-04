@@ -13,6 +13,7 @@ import { ChatLoadState, getChatLoadState } from '../viewmodel/ChatLoadState'
 export struct ChatTabComp {
   @Local vm: ChatViewModel = new ChatViewModel()
   @Local controller: ChatController = new ChatController(this.vm)
+
   @Local keyboardHeight: number = 0
   @Local theme: ThemeState = getThemeState()
 
@@ -22,33 +23,42 @@ export struct ChatTabComp {
   private mainWindow: window.Window | null = null
 
   aboutToAppear(): void {
-    // 默认新会话；若 chatLoadState 已经有 pendingSessionId 会在 @Monitor 里覆盖
-    this.vm.sessionId = Date.now().toString()
+    // 默认新会话；如果历史页已经设置了 pendingSessionId，下面会立刻加载历史会话覆盖
+    if (!this.vm.sessionId) {
+      this.vm.sessionId = Date.now().toString()
+    }
 
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
-    } catch (_) {}
+    } catch (_) {
+    }
 
     this.initKeyboardListener()
 
-    // App 启动时如果 pendingSessionId 已存在，主动加载一次（兜底）
+    // App 启动或页面创建时，如果 pendingSessionId 已存在，主动加载一次兜底
     if (this.chatLoadState.pendingSessionId) {
       this.loadSession(this.chatLoadState.pendingSessionId)
       this.chatLoadState.pendingSessionId = ''
     }
   }
 
-  // 监听跨页面信号：从 ChatHistory 切过来时加载对应会话
+  /**
+   * 监听跨页面信号：
+   * 从 ChatHistoryPage 点某条历史会话回来时，加载对应会话。
+   */
   @Monitor('chatLoadState.pendingSessionId')
   onPendingSessionChange(): void {
     const id = this.chatLoadState.pendingSessionId
+
     if (id) {
       this.loadSession(id)
-      this.chatLoadState.pendingSessionId = ''   // 消费完清空，避免重复触发
+      this.chatLoadState.pendingSessionId = ''
     }
   }
 
-  // 流结束时持久化当前会话
+  /**
+   * 流式结束时持久化当前会话。
+   */
   @Monitor('vm.isLoading')
   onLoadingChange(): void {
     if (!this.vm.isLoading && this.vm.historyMessage.length > 0) {
@@ -59,88 +69,117 @@ export struct ChatTabComp {
   aboutToDisappear(): void {
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
-    } catch (_) {}
+    } catch (_) {
+    }
 
     try {
       this.mainWindow?.off('keyboardHeightChange')
-    } catch (_) {}
+    } catch (_) {
+    }
 
     this.mainWindow = null
   }
 
   /**
-   * 加载指定会话（继续聊天，非只读）
+   * 加载指定历史会话。
    *
-   * 关键：从 PersistenceV2/JSON 反序列化出来的 messages 是 plain object，
-   * 不是 @ObservedV2 的 ChatMessage 实例。必须 new 出新实例，
-   * 否则后续 @Trace content 不会触发响应式更新，甚至运行时崩溃。
+   * 重点：
+   * 1. 从持久化里拿出来的数据可能是普通 plain object。
+   * 2. 必须重新 new ChatMessage，否则 @Trace content 可能不稳定。
+   * 3. 所有字段做兜底，避免 content / messages / id 为 undefined。
    */
   private loadSession(id: string): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+
     if (!ctx) {
       console.error('[ChatTabComp] loadSession: ctx is null')
       return
     }
 
     const sessions = loadSessions(ctx)
-    const target = sessions.find(s => s.id === id)
+    const target = sessions.find((s: ChatSession) => s.id === id)
+
     if (!target) {
       console.warn('[ChatTabComp] session not found:', id)
       return
     }
 
-    // 把 plain object 重建为 @ObservedV2 的 ChatMessage 实例
     const restored: ChatMessage[] = []
-    for (let i = 0; i < target.messages.length; i++) {
-      const plain = target.messages[i]
+    const sourceMessages: ChatMessage[] = target.messages ? target.messages : []
+
+    for (let i = 0; i < sourceMessages.length; i++) {
+      const plain = sourceMessages[i]
+
       const msg = new ChatMessage()
-      msg.id = plain.id
-      msg.role = plain.role
-      msg.content = plain.content
-      msg.createTime = plain.createTime
-      msg.sessionId = plain.sessionId
+      msg.id = plain.id ? plain.id : `${id}_${i}`
+      msg.role = plain.role ? plain.role : 'assistant'
+      msg.content = plain.content ? plain.content : ''
+      msg.createTime = plain.createTime ? plain.createTime : Date.now()
+      msg.sessionId = plain.sessionId ? plain.sessionId : id
+
       restored.push(msg)
     }
 
-    this.vm.sessionId = target.id
+    this.vm.sessionId = target.id ? target.id : id
     this.vm.historyMessage = restored
-    this.vm.inputContent = ''
+
+    // 加载历史会话后，必须清理输入框和 loading 状态
+    this.vm.resetRuntimeState()
   }
 
   /**
-   * 新建会话：清空当前历史，生成新 sessionId
+   * 新建会话。
    */
   private newSession(): void {
-    if (this.vm.isLoading) return   // 流式中禁止新建
-    this.vm.sessionId = Date.now().toString()
-    this.vm.historyMessage = []
-    this.vm.inputContent = ''
+    if (this.vm.isLoading) {
+      return
+    }
+
+    this.vm.resetForNewSession()
   }
 
+  /**
+   * 持久化当前会话。
+   *
+   * 重点：
+   * content 做空值防御，避免 substring / length 再次触发 undefined 报错。
+   */
   private persistSession(): void {
-    if (this.vm.historyMessage.length === 0) return
+    if (this.vm.historyMessage.length === 0) {
+      return
+    }
 
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-    if (!ctx) return
+
+    if (!ctx) {
+      return
+    }
 
     const messages = this.vm.historyMessage
-    const firstUser = messages.find(m => m.role === 'user')
 
-    const title = firstUser
-      ? firstUser.content.substring(0, 20) + (firstUser.content.length > 20 ? '...' : '')
+    const firstUser = messages.find((m: ChatMessage) => m.role === 'user')
+    const firstContent = firstUser && firstUser.content ? firstUser.content : ''
+
+    const title = firstContent.length > 0
+      ? firstContent.substring(0, 20) + (firstContent.length > 20 ? '...' : '')
       : '新对话'
 
     const last = messages[messages.length - 1]
-    const preview = last.content.substring(0, 30) + (last.content.length > 30 ? '...' : '')
+    const lastContent = last && last.content ? last.content : ''
 
-    const session: ChatSession = {
-      id: this.vm.sessionId,
-      title,
-      preview,
-      createTime: messages[0].createTime,
-      updateTime: last.createTime,
-      messages
-    }
+    const preview = lastContent.substring(0, 30) + (lastContent.length > 30 ? '...' : '')
+
+    const first = messages[0]
+    const createTime = first && first.createTime ? first.createTime : Date.now()
+    const updateTime = last && last.createTime ? last.createTime : Date.now()
+
+    const session: ChatSession = new ChatSession()
+    session.id = this.vm.sessionId ? this.vm.sessionId : Date.now().toString()
+    session.title = title
+    session.preview = preview
+    session.createTime = createTime
+    session.updateTime = updateTime
+    session.messages = messages
 
     saveSession(ctx, session)
   }
@@ -148,7 +187,10 @@ export struct ChatTabComp {
   private async initKeyboardListener(): Promise<void> {
     try {
       const ctx = this.getUIContext().getHostContext()
-      if (!ctx) return
+
+      if (!ctx) {
+        return
+      }
 
       const win = await window.getLastWindow(ctx)
       this.mainWindow = win
@@ -175,7 +217,6 @@ export struct ChatTabComp {
 
   build() {
     Column() {
-      // 顶部栏：标题 + 新会话按钮
       Row() {
         Text('AI 助手')
           .fontSize(18)
@@ -184,7 +225,6 @@ export struct ChatTabComp {
 
         Blank()
 
-        // 新会话按钮
         Text('+ 新会话')
           .fontSize(14)
           .fontColor(this.vm.isLoading ? this.theme.textTertiary : this.theme.primary)

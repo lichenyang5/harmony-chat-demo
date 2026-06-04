@@ -7,23 +7,17 @@ import { ChatViewModel } from '../viewmodel/ChatViewModel'
 /**
  * ChatController
  *
- * 流式设计（参考主流 AI 助手）：
- * 1. 发送时往 historyMessage push 两条：用户消息 + 空的 AI 占位消息
- * 2. 保留对 AI 占位消息的引用 activeAiMessage
- * 3. 每收到一个 chunk，直接 activeAiMessage.content += chunk
- *    @Trace content 自动触发对应 MessageBubble 重渲染
- * 4. 流结束时清理引用，loading 退出
- *
- * 为什么不要前端打字机：
- * - 后端已经按 50ms/字 流式推送，是真打字速度
- * - 前端再加打字机会变成"网络已结束但 UI 还在打"的脱节状态
- * - 中断时也会有"缓冲区还有字没出来"的尴尬
+ * 流式设计：
+ * 1. 发送时往 historyMessage push 两条：用户消息 + 空的 AI 占位消息。
+ * 2. 保留对 AI 占位消息的引用 activeAiMessage。
+ * 3. 每收到一个 chunk，直接 activeAiMessage.content += chunk。
+ * 4. ChatMessage.content 是 @Trace，UI 会自动更新对应气泡。
  */
 export class ChatController {
   private biz: ChatBiz = new ChatBiz()
   private vm: ChatViewModel
 
-  // 当前流式请求引用，用于阶段 3 中断
+  // 当前流式请求引用，用于中断
   private currentRequest: http.HttpRequest | null = null
 
   // 当前正在累积内容的 AI 消息引用
@@ -35,8 +29,14 @@ export class ChatController {
 
   sendMessage(): void {
     const content = this.vm.inputContent.trim()
+
     if (!content || this.vm.isLoading) {
       return
+    }
+
+    // 如果当前会话 ID 为空，兜底生成一个
+    if (!this.vm.sessionId) {
+      this.vm.sessionId = Date.now().toString()
     }
 
     // 1. 用户消息
@@ -47,7 +47,7 @@ export class ChatController {
     userMessage.createTime = Date.now()
     userMessage.sessionId = this.vm.sessionId
 
-    // 2. AI 占位消息（内容空，等流式追加）
+    // 2. AI 占位消息，内容为空，等流式 chunk 追加
     const aiMessage = new ChatMessage()
     aiMessage.id = `${Date.now()}_ai`
     aiMessage.role = 'assistant'
@@ -55,13 +55,17 @@ export class ChatController {
     aiMessage.createTime = Date.now()
     aiMessage.sessionId = this.vm.sessionId
 
-    // 3. 先构造历史快照（必须在 push 当前对话之前，否则后端会把本次 user 也算进历史）
+    // 3. 构造历史快照
+    // 注意：这里 content 必须做空值防御，避免历史脏数据导致 m.content.length 崩溃。
     const historySnapshot: ChatHistoryItem[] = this.vm.historyMessage
-      .filter(m => m.content.length > 0)
-      .map(m => {
+      .filter((m: ChatMessage) => {
+        const safeContent = m.content ? m.content : ''
+        return safeContent.length > 0
+      })
+      .map((m: ChatMessage) => {
         const item = new ChatHistoryItem()
-        item.role = m.role
-        item.content = m.content
+        item.role = m.role ? m.role : 'assistant'
+        item.content = m.content ? m.content : ''
         return item
       })
 
@@ -77,29 +81,27 @@ export class ChatController {
     // 6. 发起 SSE 流式请求
     this.currentRequest = this.biz.sendMessageStream(
       content,
-      this.vm.sessionId || undefined,
+      this.vm.sessionId ? this.vm.sessionId : undefined,
       historySnapshot,
       {
         onChunk: (chunk: string) => {
-          if (!this.activeAiMessage) return
+          if (!this.activeAiMessage) {
+            return
+          }
 
-          // 关键：直接修改 @Trace content
-          // 由 ChatMessage 的 @ObservedV2 触发对应气泡重渲染
-          this.activeAiMessage.content += chunk
-
-          // isLoading 现在贯穿整个生成期，
-          // 由 onDone / onError / stopGeneration 统一关闭。
-          // 这样发送 / 停止按钮的切换能覆盖整个流式过程。
+          const safeChunk = chunk ? chunk : ''
+          this.activeAiMessage.content += safeChunk
         },
 
         onDone: (meta: SseDoneMeta) => {
-          // 更新会话 ID（首次会话时后端给出）
           if (meta.sessionId) {
             this.vm.sessionId = meta.sessionId
+
             if (this.activeAiMessage) {
               this.activeAiMessage.sessionId = meta.sessionId
             }
           }
+
           if (meta.messageId && this.activeAiMessage) {
             this.activeAiMessage.id = meta.messageId
           }
@@ -115,6 +117,7 @@ export class ChatController {
           if (this.activeAiMessage) {
             this.activeAiMessage.content = '生成失败，请稍后重试'
           }
+
           this.vm.isLoading = false
           this.activeAiMessage = null
           this.currentRequest = null
@@ -124,18 +127,27 @@ export class ChatController {
   }
 
   /**
-   * 中断生成（阶段 3 接入按钮调用）
+   * 中断生成
    */
   stopGeneration(): void {
     if (this.currentRequest) {
       try {
         this.currentRequest.destroy()
-      } catch (_) {}
+      } catch (_) {
+      }
+
       this.currentRequest = null
     }
 
     if (this.activeAiMessage) {
-      this.activeAiMessage.content += '\n\n[已停止]'
+      const oldContent = this.activeAiMessage.content ? this.activeAiMessage.content : ''
+
+      if (oldContent.length > 0) {
+        this.activeAiMessage.content = oldContent + '\n\n[已停止]'
+      } else {
+        this.activeAiMessage.content = '[已停止]'
+      }
+
       this.activeAiMessage = null
     }
 
