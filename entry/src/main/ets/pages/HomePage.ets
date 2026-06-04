@@ -12,14 +12,13 @@ import { ThemeState, getThemeState } from '../viewmodel/ThemeState'
 @HMRouter({ pageUrl: EntryRoutes.PAGE_HOME })
 @ComponentV2
 export struct HomePage {
-  @Local tabState: AppTabState =
-    AppStorageV2.connect(AppTabState, 'AppTabState', () => new AppTabState())!
+  @Local tabState: AppTabState = AppStorageV2.connect(AppTabState, 'AppTabState', () => new AppTabState())!
   @Local bottomAvoid: number = WindowUtil.getBottomAvoidHeight()
 
   // Provider 1：登录状态，供所有 Tab 消费
   @Provider() auth: AuthPersist = getAuthPersist()
 
-  // Provider 2：主题状态，供所有 Tab 消费；PersistenceV2 单例，重启后恢复
+  // Provider 2：主题状态，供所有 Tab 消费
   @Provider() theme: ThemeState = getThemeState()
 
   aboutToAppear(): void {
@@ -31,10 +30,11 @@ export struct HomePage {
     Column({ space: 4 }) {
       Text(icon)
         .fontSize(22)
-        .fontColor(this.tabState.currentIndex === index ? '#007DFF' : this.theme.tabInactive)
+        .fontColor(this.tabState.currentIndex === index ? this.theme.tabActive : this.theme.tabInactive)
+
       Text(label)
         .fontSize(10)
-        .fontColor(this.tabState.currentIndex === index ? '#007DFF' : this.theme.tabInactive)
+        .fontColor(this.tabState.currentIndex === index ? this.theme.tabActive : this.theme.tabInactive)
     }
     .width('100%')
     .height('100%')
@@ -45,7 +45,6 @@ export struct HomePage {
 
   build() {
     Tabs({ barPosition: BarPosition.End, index: this.tabState.currentIndex }) {
-
       TabContent() {
         HomeTabComp()
       }
@@ -60,7 +59,6 @@ export struct HomePage {
         ProfileTabComp()
       }
       .tabBar(this.tabBarItem(2, '我的', '○'))
-
     }
     .width('100%')
     .height('100%')

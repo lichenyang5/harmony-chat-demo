@@ -1,15 +1,21 @@
-import { ChatMessage } from '../models/chatModel'
+import { http } from '@kit.NetworkKit'
+import { SseCallbacks } from 'common'
 import { ChatImp } from '../imp/ChatImp'
 
 export class ChatBiz {
   private imp: ChatImp = new ChatImp()
 
-  sendMessage(content: string, sessionId?: string): Promise<ChatMessage | null> {
-    return this.imp.sendMessage(content, sessionId).then((result) => {
-      if (result.code === 200) {
-        return result.data
-      }
-      return null
-    })
+  /**
+   * 流式发送：Biz 层目前是透传，未来可以在这里做：
+   * - 业务校验（敏感词、长度限制）
+   * - chunk 累积、过滤、转换
+   * - 失败重试
+   */
+  sendMessageStream(
+    content: string,
+    sessionId: string | undefined,
+    callbacks: SseCallbacks
+  ): http.HttpRequest {
+    return this.imp.sendMessageStream(content, sessionId, callbacks)
   }
 }

@@ -8,6 +8,7 @@ import { ThemeState } from '../viewmodel/ThemeState'
 @ComponentV2
 export struct HomeTabComp {
   @Local cartCount: number = 0
+
   @Consumer() auth: AuthPersist = new AuthPersist()
   @Consumer() theme: ThemeState = new ThemeState()
 
@@ -37,43 +38,49 @@ export struct HomeTabComp {
         Row()
           .width('100%')
           .height(80)
-          .backgroundColor(this.theme.placeholderBg)   // ← 主题色
+          .backgroundColor(this.theme.placeholderBg)
           .borderRadius(8)
 
         Text(product.name)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.theme.textPrimary)            // ← 主题色
+          .fontColor(this.theme.textPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Text(product.desc)
           .fontSize(11)
-          .fontColor(this.theme.textSecondary)          // ← 主题色
+          .fontColor(this.theme.textSecondary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Text(`¥${product.price}`)
           .fontSize(15)
-          .fontColor('#FF4D4F')
+          .fontColor(this.theme.danger)
           .fontWeight(FontWeight.Bold)
       }
       .width('100%')
       .padding(10)
-      .backgroundColor(this.theme.surface)              // ← 主题色
+      .backgroundColor(this.theme.surface)
       .borderRadius(12)
-      .shadow({ radius: 4, color: '#0A000000', offsetY: 2 })
+      .shadow({
+        radius: 4,
+        color: this.theme.shadowColor,
+        offsetY: 2
+      })
 
       if (product.tag) {
         Text(product.tag)
           .fontSize(10)
-          .fontColor(Color.White)
+          .fontColor(this.theme.onPrimary)
           .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .backgroundColor('#007DFF')
+          .backgroundColor(this.theme.primary)
           .borderRadius({ topRight: 12, bottomLeft: 8 })
       }
     }
-    .onClick(() => { this.goDetail(product) })
+    .onClick(() => {
+      this.goDetail(product)
+    })
   }
 
   build() {
@@ -84,25 +91,28 @@ export struct HomeTabComp {
           Text(this.auth.userName ? `你好，${this.auth.userName}` : '你好，游客')
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
-            .fontColor(this.theme.textPrimary)          // ← 主题色
+            .fontColor(this.theme.textPrimary)
+
           Text('欢迎来到精选课程')
             .fontSize(12)
-            .fontColor(this.theme.textSecondary)        // ← 主题色
+            .fontColor(this.theme.textSecondary)
         }
         .alignItems(HorizontalAlign.Start)
 
         Blank()
 
         Stack({ alignContent: Alignment.TopEnd }) {
-          Text('🛒').fontSize(24)
+          Text('🛒')
+            .fontSize(24)
+
           if (this.cartCount > 0) {
             Text(`${this.cartCount}`)
               .fontSize(10)
-              .fontColor(Color.White)
+              .fontColor(this.theme.onDanger)
               .width(16)
               .height(16)
               .textAlign(TextAlign.Center)
-              .backgroundColor('#FF4D4F')
+              .backgroundColor(this.theme.danger)
               .borderRadius(8)
               .offset({ x: 4, y: -4 })
           }
@@ -110,6 +120,7 @@ export struct HomeTabComp {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 16, bottom: 12 })
+      .backgroundColor(this.theme.bg)
 
       // 商品网格
       Grid() {
@@ -125,9 +136,10 @@ export struct HomeTabComp {
       .padding({ left: 16, right: 16, bottom: 16 })
       .width('100%')
       .layoutWeight(1)
+      .backgroundColor(this.theme.bg)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.theme.bg)                     // ← 主题色
+    .backgroundColor(this.theme.bg)
   }
 }

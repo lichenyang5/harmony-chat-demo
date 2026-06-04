@@ -1,6 +1,6 @@
 import { ChatRoutes } from '../constants/ChatRoutes'
 import { HMRouter, HMRouterMgr, HMParamType } from '@hadss/hmrouter'
-import { HMUtil } from 'common'
+import { HMUtil, ThemeState, getThemeState } from 'common'
 import { ChatController } from '../controller/ChatController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from '../components/ChatListComp'
@@ -15,17 +15,22 @@ export struct ChatPage {
   @Local controller: ChatController = new ChatController(this.vm)
   @Local showDrawer: boolean = false
   @Local keyboardHeight: number = 0
+  @Local theme: ThemeState = getThemeState()
+
   private mainWindow: window.Window | null = null
 
   aboutToAppear(): void {
     const session = HMRouterMgr.getCurrentParam(HMParamType.routeParam) as ChatSession | null
+
     if (session?.messages?.length) {
       this.vm.historyMessage = session.messages
       this.vm.sessionId = session.id
     }
+
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
     } catch (_) {}
+
     this.initKeyboardListener()
   }
 
@@ -33,25 +38,37 @@ export struct ChatPage {
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
     } catch (_) {}
+
     try {
       this.mainWindow?.off('keyboardHeightChange')
     } catch (_) {}
+
     this.mainWindow = null
   }
 
   private async initKeyboardListener(): Promise<void> {
     try {
       const ctx = this.getUIContext().getHostContext()
-      if (!ctx) return
+      if (!ctx) {
+        return
+      }
+
       const win = await window.getLastWindow(ctx)
       this.mainWindow = win
+
       win.on('keyboardHeightChange', (heightPx: number) => {
         const heightVp = heightPx > 0
           ? heightPx / display.getDefaultDisplaySync().densityPixels
           : 0
+
         this.getUIContext().animateTo(
-          { duration: heightPx > 0 ? 300 : 250, curve: Curve.EaseOut },
-          () => { this.keyboardHeight = heightVp }
+          {
+            duration: heightPx > 0 ? 300 : 250,
+            curve: Curve.EaseOut
+          },
+          () => {
+            this.keyboardHeight = heightVp
+          }
         )
       })
     } catch (e) {
@@ -61,69 +78,100 @@ export struct ChatPage {
 
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
-
       Column() {
         // 顶部栏
         Row() {
           Text('←')
             .fontSize(22)
+            .fontColor(this.theme.textPrimary)
             .padding(8)
-            .onClick(() => { HMUtil.pop() })
+            .onClick(() => {
+              HMUtil.pop()
+            })
 
           Blank()
 
-          Text('AI 助手').fontSize(18).fontWeight(FontWeight.Medium)
+          Text('AI 助手')
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.theme.textPrimary)
 
           Blank()
 
           Text('☰')
             .fontSize(22)
+            .fontColor(this.theme.textPrimary)
             .padding(8)
-            .onClick(() => { this.showDrawer = !this.showDrawer })
+            .onClick(() => {
+              this.showDrawer = !this.showDrawer
+            })
         }
         .width('100%')
         .height(56)
         .padding({ left: 8, right: 8 })
+        .backgroundColor(this.theme.surface)
+        .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
-        // ✅ layoutWeight(1)：撑满剩余高度，键盘弹起时自动收缩
+        // layoutWeight(1)：撑满剩余高度，键盘弹起时自动收缩
         ChatListComp({ vm: this.vm })
           .layoutWeight(1)
 
         ChatInputComp({
           inputContent: this.vm.inputContent,
-          onInputChange: (val: string) => { this.vm.inputContent = val },
-          onSend: () => { this.controller.sendMessage() }
+          onInputChange: (val: string) => {
+            this.vm.inputContent = val
+          },
+          onSend: () => {
+            this.controller.sendMessage()
+          }
         })
       }
       .width('100%')
       .height('100%')
-      .backgroundColor('#FFFFFF')
-      // ✅ 键盘避让：Column 底部 padding = 键盘高度，内容整体上移
+      .backgroundColor(this.theme.bg)
+      // 键盘避让：Column 底部 padding = 键盘高度，内容整体上移
       .padding({ bottom: this.keyboardHeight })
 
       // 历史记录抽屉
       if (this.showDrawer) {
         Column() {
           Row() {
-            Text('历史记录').fontSize(18).fontWeight(FontWeight.Medium)
+            Text('历史记录')
+              .fontSize(18)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.theme.textPrimary)
+
             Blank()
+
             Text('✕')
               .fontSize(18)
-              .onClick(() => { this.showDrawer = false })
+              .fontColor(this.theme.textPrimary)
+              .onClick(() => {
+                this.showDrawer = false
+              })
           }
           .width('100%')
           .padding(16)
+          .backgroundColor(this.theme.surface)
+          .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
-          Text('暂无历史记录').fontColor('#999999').padding(16)
+          Text('暂无历史记录')
+            .fontSize(14)
+            .fontColor(this.theme.textSecondary)
+            .padding(16)
         }
         .width('70%')
         .height('100%')
-        .backgroundColor('#FFFFFF')
-        .shadow({ radius: 8, color: '#33000000', offsetX: -4 })
+        .backgroundColor(this.theme.surface)
+        .shadow({
+          radius: 8,
+          color: this.theme.drawerShadowColor,
+          offsetX: -4
+        })
       }
-
     }
     .width('100%')
     .height('100%')
+    .backgroundColor(this.theme.bg)
   }
 }
