@@ -6,13 +6,14 @@ import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from '../components/ChatListComp'
 import { ChatInputComp } from '../components/ChatInputComp'
 import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
-import { ChatSession } from '../models/chatModel'
+import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
 
 @HMRouter({ pageUrl: ChatRoutes.PAGE_CHAT })
 @ComponentV2
 export struct ChatPage {
   @Local vm: ChatViewModel = new ChatViewModel()
   @Local controller: ChatController = new ChatController(this.vm)
+
   @Local showDrawer: boolean = false
   @Local keyboardHeight: number = 0
   @Local theme: ThemeState = getThemeState()
@@ -22,14 +23,18 @@ export struct ChatPage {
   aboutToAppear(): void {
     const session = HMRouterMgr.getCurrentParam(HMParamType.routeParam) as ChatSession | null
 
-    if (session?.messages?.length) {
-      this.vm.historyMessage = session.messages
-      this.vm.sessionId = session.id
+    if (session && session.messages && session.messages.length > 0) {
+      this.restoreSession(session)
+    } else {
+      if (!this.vm.sessionId) {
+        this.vm.sessionId = Date.now().toString()
+      }
     }
 
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
-    } catch (_) {}
+    } catch (_) {
+    }
 
     this.initKeyboardListener()
   }
@@ -37,18 +42,44 @@ export struct ChatPage {
   aboutToDisappear(): void {
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
-    } catch (_) {}
+    } catch (_) {
+    }
 
     try {
       this.mainWindow?.off('keyboardHeightChange')
-    } catch (_) {}
+    } catch (_) {
+    }
 
     this.mainWindow = null
+  }
+
+  private restoreSession(session: ChatSession): void {
+    const restored: ChatMessage[] = []
+    const sourceMessages: ChatMessagePlain[] = session.messages ? session.messages : []
+
+    for (let i = 0; i < sourceMessages.length; i++) {
+      const plain = sourceMessages[i]
+
+      const msg = new ChatMessage()
+      msg.id = plain.id ? plain.id : `${session.id}_${i}`
+      msg.role = plain.role ? plain.role : 'assistant'
+      msg.content = plain.content ? plain.content : ''
+      msg.createTime = plain.createTime ? plain.createTime : Date.now()
+      msg.sessionId = plain.sessionId ? plain.sessionId : session.id
+
+      restored.push(msg)
+    }
+
+    this.vm.historyMessage = restored
+    this.vm.sessionId = session.id ? session.id : Date.now().toString()
+    this.vm.inputContent = ''
+    this.vm.isLoading = false
   }
 
   private async initKeyboardListener(): Promise<void> {
     try {
       const ctx = this.getUIContext().getHostContext()
+
       if (!ctx) {
         return
       }
@@ -79,7 +110,6 @@ export struct ChatPage {
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column() {
-        // 顶部栏
         Row() {
           Text('←')
             .fontSize(22)
@@ -112,27 +142,28 @@ export struct ChatPage {
         .backgroundColor(this.theme.surface)
         .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
-        // layoutWeight(1)：撑满剩余高度，键盘弹起时自动收缩
         ChatListComp({ vm: this.vm })
           .layoutWeight(1)
 
         ChatInputComp({
           inputContent: this.vm.inputContent,
+          isGenerating: this.vm.isLoading,
           onInputChange: (val: string) => {
             this.vm.inputContent = val
           },
           onSend: () => {
             this.controller.sendMessage()
+          },
+          onStop: () => {
+            this.controller.stopGeneration()
           }
         })
       }
       .width('100%')
       .height('100%')
       .backgroundColor(this.theme.bg)
-      // 键盘避让：Column 底部 padding = 键盘高度，内容整体上移
       .padding({ bottom: this.keyboardHeight })
 
-      // 历史记录抽屉
       if (this.showDrawer) {
         Column() {
           Row() {

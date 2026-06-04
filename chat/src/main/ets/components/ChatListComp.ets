@@ -4,28 +4,40 @@ import { ThemeState, getThemeState } from 'common'
 
 /**
  * 单条气泡子组件
- *
- * 重点：
- * 1. 使用 @ComponentV2 子组件接收 ChatMessage。
- * 2. msg.content 做空值防御，避免历史数据异常时 undefined.length 崩溃。
- * 3. AI 占位消息 content 为空时显示“AI 思考中...”，等流式 chunk 到达后自动替换。
  */
 @ComponentV2
 struct MessageBubble {
   @Param @Require msg: ChatMessage
+  @Param isThinking: boolean = false
+
   @Local theme: ThemeState = getThemeState()
 
   private getSafeContent(): string {
     if (this.msg.content) {
       return this.msg.content
     }
+
     return ''
+  }
+
+  private getAssistantText(): string {
+    const content = this.getSafeContent()
+
+    if (content.length > 0) {
+      return content
+    }
+
+    if (this.isThinking) {
+      return 'AI 思考中...'
+    }
+
+    return '该条回复内容未保存完整'
   }
 
   build() {
     Row() {
       if (this.msg.role === 'assistant') {
-        Text(this.getSafeContent().length > 0 ? this.getSafeContent() : 'AI 思考中...')
+        Text(this.getAssistantText())
           .fontSize(15)
           .fontColor(this.theme.textPrimary)
           .padding(12)
@@ -80,16 +92,59 @@ export struct ChatListComp {
     }
   }
 
+  /**
+   * 判断当前 assistant 空消息是不是“正在生成中的最后一条”
+   *
+   * 只有满足：
+   * 1. vm.isLoading 为 true
+   * 2. 当前消息是 assistant
+   * 3. 当前消息 content 为空
+   * 4. 当前消息是列表最后一条
+   *
+   * 才显示 AI 思考中。
+   */
+  private isLastLiveThinking(item: ChatMessage): boolean {
+    if (!this.vm.isLoading) {
+      return false
+    }
+
+    if (item.role !== 'assistant') {
+      return false
+    }
+
+    const content = item.content ? item.content : ''
+
+    if (content.length > 0) {
+      return false
+    }
+
+    if (!this.vm.historyMessage || this.vm.historyMessage.length === 0) {
+      return false
+    }
+
+    const last: ChatMessage = this.vm.historyMessage[this.vm.historyMessage.length - 1]
+
+    if (!last) {
+      return false
+    }
+
+    return last.id === item.id
+  }
+
   build() {
     List({ scroller: this.scroller, space: 12 }) {
       ForEach(this.vm.historyMessage ? this.vm.historyMessage : [], (item: ChatMessage) => {
         ListItem() {
-          MessageBubble({ msg: item })
+          MessageBubble({
+            msg: item,
+            isThinking: this.isLastLiveThinking(item)
+          })
         }
       }, (item: ChatMessage) => {
         if (item.id) {
           return item.id
         }
+
         return `${item.createTime}_${item.role}`
       })
     }
