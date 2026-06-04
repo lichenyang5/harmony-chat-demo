@@ -1,12 +1,13 @@
+import { ChatRoutes } from '../constants/ChatRoutes'
 import { HMRouter, HMRouterMgr,HMLifecycleState } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
 import { loadSessions, deleteSession } from '../utils/ChatPersist'
-import { route, NAV_ID } from '../constants/HMConstants'
-import { HMUtil } from '../utils/HMUtil'
+import { NAV_ID } from 'common'
+import { HMUtil } from 'common'
 
 @HMRouter({
-  pageUrl: route.PAGE_CHAT_HISTORY,
+  pageUrl: ChatRoutes.PAGE_CHAT_HISTORY,
   interceptors: ['AuthInterceptor']   // ← 通过 interceptorName 字符串引用
 })
 @ComponentV2
@@ -133,7 +134,7 @@ export struct ChatHistoryPage {
               // 点击进入历史会话（只读模式，后续可扩展继续对话）
               HMRouterMgr.push({
                 navigationId: NAV_ID,
-                pageUrl: route.PAGE_CHAT,
+                pageUrl: ChatRoutes.PAGE_CHAT,
                 param: session   // 把 session 传给 ChatPage，让它加载历史消息
               })
             })

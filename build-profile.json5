@@ -51,6 +51,14 @@
           ]
         }
       ]
+    },
+    {
+      "name": "common",
+      "srcPath": "./common",
+    },
+    {
+      "name": "chat",
+      "srcPath": "./chat",
     }
   ]
 }

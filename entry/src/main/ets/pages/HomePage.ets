@@ -1,13 +1,13 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouter } from '@hadss/hmrouter'
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppTabState } from '../viewmodel/AppTabState'
 import { HomeTabComp } from '../components/HomeTabComp'
-import { ChatTabComp } from '../components/ChatTabComp'
+import { ChatTabComp } from 'chat'
 import { ProfileTabComp } from '../components/ProfileTabComp'
-import { route } from '../constants/HMConstants'
-import { WindowUtil } from '../utils/WindowUtil'
+import { WindowUtil } from 'common'
 import { AuthPersist, getAuthPersist } from '../utils/AuthPersist'
-@HMRouter({ pageUrl: route.PAGE_HOME })
+@HMRouter({ pageUrl: EntryRoutes.PAGE_HOME })
 @ComponentV2
 export struct HomePage {
   @Local tabState: AppTabState =
@@ -23,6 +23,9 @@ export struct HomePage {
    * provider 爷孙组件 provider注册,子组件consumer获取
    * */
   @Provider() auth: AuthPersist = getAuthPersist()   // ← 新增
+  aboutToAppear(): void {
+    console.log('ooo这是混淆测试')
+  }
   @Builder
   tabBarItem(index: number, label: string, icon: string) {
     Column({ space: 4 }) {

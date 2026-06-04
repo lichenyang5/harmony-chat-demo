@@ -1,7 +1,7 @@
-import { ApiConstants } from '../constants/ApiConstants'
-import { ApiResponse } from '../models/chatModel'
+import { ApiConstants } from 'common'
+import { ApiResponse } from 'common'
 import { LoginRequest, UserInfo } from '../models/userModel'
-import { HttpUtil } from '../utils/HttpUtil'
+import { HttpUtil } from 'common'
 
 export class AuthImp {
   login(request: LoginRequest): Promise<ApiResponse<UserInfo>> {

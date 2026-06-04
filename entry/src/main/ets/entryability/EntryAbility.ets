@@ -3,7 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { SameRouteInterceptor } from '../interceptors/SameRouteInterceptor'
-import { WindowUtil } from '../utils/WindowUtil'
+import { WindowUtil } from 'common'
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {

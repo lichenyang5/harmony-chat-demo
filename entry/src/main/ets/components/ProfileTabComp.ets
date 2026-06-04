@@ -1,5 +1,6 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouterMgr } from '@hadss/hmrouter'
-import { route, NAV_ID } from '../constants/HMConstants'
+import { NAV_ID } from 'common'
 import { tabState } from '../viewmodel/AppTabState'
 import { clearAuth, AuthPersist } from '../utils/AuthPersist'
 
@@ -15,7 +16,7 @@ export struct ProfileTabComp {
     {
       label: '消息记录',
       action: () => {
-        HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: route.PAGE_CHAT_HISTORY })
+        HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_CHAT_HISTORY })
       }
     },
     { label: '帮助与反馈', action: () => {} },
@@ -28,7 +29,7 @@ export struct ProfileTabComp {
     // 2. 清除持久化 token（PersistenceV2）
     clearAuth()
     // 3. replace 到登录页（不保留回退栈，用户无法返回首页）
-    // HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
+    // HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_LOGIN })
   }
 
   build() {
@@ -103,7 +104,7 @@ export struct ProfileTabComp {
           .fontColor(Color.White)
           .margin({ bottom: 40 })
           .onClick(() => {
-            HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: route.PAGE_LOGIN })
+            HMRouterMgr.push({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_LOGIN })
           })
       }
     }
