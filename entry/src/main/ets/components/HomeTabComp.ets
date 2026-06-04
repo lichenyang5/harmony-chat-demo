@@ -3,23 +3,23 @@ import { HMRouterMgr, HMPopInfo } from '@hadss/hmrouter'
 import { NAV_ID } from 'common'
 import { Product, MOCK_PRODUCTS } from '../models/productModel'
 import { AuthPersist } from '../utils/AuthPersist'
+import { ThemeState } from '../viewmodel/ThemeState'
+
 @ComponentV2
 export struct HomeTabComp {
-  // 购物车总数：由 ProductDetailPage pop 返回的 onResult 累加
   @Local cartCount: number = 0
-  // consumer获取父组件provider的变量
-  @Consumer() auth: AuthPersist = new AuthPersist()   // ← 新增，默认值兜底
-  // 点击商品卡片 → push 传参 → 等待 onResult 拿回加购数量
+  @Consumer() auth: AuthPersist = new AuthPersist()
+  @Consumer() theme: ThemeState = new ThemeState()
+
   private goDetail(product: Product): void {
     HMRouterMgr.push(
       {
         navigationId: NAV_ID,
         pageUrl: EntryRoutes.PAGE_PRODUCT_DETAIL,
-        param: product          // ← 路由传参：把整个 Product 对象传给详情页
+        param: product
       },
       {
         onResult: (popInfo: HMPopInfo) => {
-          // ← pop 返回传参：详情页 setPopParam(n) 后 pop，result 就是 n
           const addCount = popInfo.result as number
           if (addCount > 0) {
             this.cartCount += addCount
@@ -37,18 +37,19 @@ export struct HomeTabComp {
         Row()
           .width('100%')
           .height(80)
-          .backgroundColor('#EEF2FF')
+          .backgroundColor(this.theme.placeholderBg)   // ← 主题色
           .borderRadius(8)
 
         Text(product.name)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
+          .fontColor(this.theme.textPrimary)            // ← 主题色
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Text(product.desc)
           .fontSize(11)
-          .fontColor('#888888')
+          .fontColor(this.theme.textSecondary)          // ← 主题色
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -59,11 +60,10 @@ export struct HomeTabComp {
       }
       .width('100%')
       .padding(10)
-      .backgroundColor(Color.White)
+      .backgroundColor(this.theme.surface)              // ← 主题色
       .borderRadius(12)
       .shadow({ radius: 4, color: '#0A000000', offsetY: 2 })
 
-      // 角标（有 tag 时才显示）
       if (product.tag) {
         Text(product.tag)
           .fontSize(10)
@@ -78,15 +78,16 @@ export struct HomeTabComp {
 
   build() {
     Column() {
-      // 顶部栏：欢迎语 + 标题 + 购物车角标
+      // 顶部栏
       Row() {
         Column({ space: 2 }) {
           Text(this.auth.userName ? `你好，${this.auth.userName}` : '你好，游客')
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
+            .fontColor(this.theme.textPrimary)          // ← 主题色
           Text('欢迎来到精选课程')
             .fontSize(12)
-            .fontColor('#888888')
+            .fontColor(this.theme.textSecondary)        // ← 主题色
         }
         .alignItems(HorizontalAlign.Start)
 
@@ -127,6 +128,6 @@ export struct HomeTabComp {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F5F7FA')
+    .backgroundColor(this.theme.bg)                     // ← 主题色
   }
 }

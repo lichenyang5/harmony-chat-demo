@@ -3,6 +3,7 @@ import { HMRouterMgr } from '@hadss/hmrouter'
 import { NAV_ID } from 'common'
 import { tabState } from '../viewmodel/AppTabState'
 import { clearAuth, AuthPersist } from '../utils/AuthPersist'
+import { getThemeState,ThemeState } from '../viewmodel/ThemeState'
 
 interface MenuItem {
   label: string
@@ -12,6 +13,7 @@ interface MenuItem {
 @ComponentV2
 export struct ProfileTabComp {
   @Consumer() auth: AuthPersist = new AuthPersist()   // ← 新增
+  @Local ThemeState:ThemeState = getThemeState()
   private menuItems: MenuItem[] = [
     {
       label: '消息记录',
@@ -85,7 +87,17 @@ export struct ProfileTabComp {
       .margin({ top: 12 })
 
       Blank()
-
+      if(this.ThemeState.isDark){
+        Button('白天模式')
+          .onClick(()=>{
+            this.ThemeState.isDark=false
+          })
+      }else{
+        Button('夜间模式')
+          .onClick(()=>{
+            this.ThemeState.isDark=true
+          })
+      }
       // 退出登录 / 去登录
       if (this.auth.token.length > 0) {
         Button('退出登录')
