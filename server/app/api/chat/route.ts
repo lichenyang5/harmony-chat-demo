@@ -1,10 +1,6 @@
 import { NextRequest } from 'next/server'
 import { randomUUID } from 'crypto'
 
-/**
- * Mock AI 回复语料库
- * 选成稍长一点的句子，流式输出才有"打字感"
- */
 const MOCK_REPLIES = [
   '这是一个很有意思的问题。让我来仔细分析一下你的需求，然后给出一个相对完整的回答。首先，我们需要明确一下问题的核心要点。',
   '根据你描述的情况，我推荐你可以从三个方向来考虑：第一，先理清当前的关键约束；第二，列出所有可行的方案；第三，对比每个方案的优劣后再做决定。',
@@ -13,11 +9,11 @@ const MOCK_REPLIES = [
   '不错的提问。其实这个话题展开讲可以非常深入。我先给你一个简要的答案：核心思想是分而治之，把复杂的问题拆解成若干个小问题，逐个解决，最后再把结果合起来。'
 ]
 
-/**
- * SSE chunk 数据帧
- * - 中间帧：{ chunk: '某个字', done: false }
- * - 结束帧：{ done: true, sessionId, messageId }
- */
+interface HistoryItem {
+  role: string
+  content: string
+}
+
 interface SseFrame {
   chunk?: string
   done: boolean
@@ -25,15 +21,16 @@ interface SseFrame {
   messageId?: string
 }
 
-/**
- * 按字符延迟工具：模拟 LLM 逐字生成
- */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 export async function POST(req: NextRequest) {
-  const { inputContent, sessionId } = await req.json()
+  const { inputContent, sessionId, history } = await req.json() as {
+    inputContent: string
+    sessionId?: string
+    history?: HistoryItem[]
+  }
 
   if (!inputContent) {
     return new Response(
@@ -42,25 +39,30 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // 选一个 mock 回复
-  const replyContent = MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)]
+  // 计算当前是第几轮对话
+  // history 里只包含已完成的消息（不含本次 inputContent）
+  // 每轮 = 1 个 user + 1 个 assistant
+  const userCount = (history ?? []).filter(m => m.role === 'user').length
+  const currentTurn = userCount + 1   // 当前是第几轮（含本次）
+
+  // 多轮时在回复前加上下文标记，让前端能看到 history 真的传过去了
+  const baseReply = MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)]
+  const replyContent = currentTurn > 1
+    ? `（第 ${currentTurn} 轮 · 我记得前面聊过 ${userCount} 个问题）\n\n${baseReply}`
+    : baseReply
+
   const finalSessionId = sessionId || randomUUID()
   const messageId = randomUUID()
 
   const encoder = new TextEncoder()
-
-  // 构造可读流：按字推送
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // 1. 按字符 enqueue
         for (const ch of replyContent) {
           const frame: SseFrame = { chunk: ch, done: false }
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`))
-          await sleep(50)   // 50ms / 字，体感接近真实 LLM
+          await sleep(50)
         }
-
-        // 2. 结束帧：告诉前端"流结束了"，附带本次会话/消息 ID
         const endFrame: SseFrame = {
           done: true,
           sessionId: finalSessionId,
@@ -68,7 +70,6 @@ export async function POST(req: NextRequest) {
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(endFrame)}\n\n`))
       } catch (err) {
-        // 客户端断开连接时 enqueue 会抛错，捕获后就结束
         console.error('[SSE] stream error', err)
       } finally {
         controller.close()
@@ -81,7 +82,6 @@ export async function POST(req: NextRequest) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
-      // 关闭 Nginx / 边缘服务器的响应缓冲，否则 chunk 不会立即下发
       'X-Accel-Buffering': 'no'
     }
   })

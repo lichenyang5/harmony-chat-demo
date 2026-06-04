@@ -3,7 +3,7 @@ import { HMRouter } from '@hadss/hmrouter'
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppTabState } from '../viewmodel/AppTabState'
 import { HomeTabComp } from '../components/HomeTabComp'
-import { ChatTabComp } from 'chat'
+import { ChatTabComp, ChatLoadState, getChatLoadState } from 'chat'
 import { ProfileTabComp } from '../components/ProfileTabComp'
 import { WindowUtil } from 'common'
 import { AuthPersist, getAuthPersist } from '../utils/AuthPersist'
@@ -20,6 +20,17 @@ export struct HomePage {
 
   // Provider 2：主题状态，供所有 Tab 消费
   @Provider() theme: ThemeState = getThemeState()
+
+  // 跨页面会话切换信号：ChatHistory 点击会话 → 设置 pendingSessionId
+  // 这里监听到后切到 Chat Tab，ChatTabComp 内部再监听并 loadSession
+  @Local chatLoadState: ChatLoadState = getChatLoadState()
+
+  @Monitor('chatLoadState.pendingSessionId')
+  onPendingSession(): void {
+    if (this.chatLoadState.pendingSessionId) {
+      this.tabState.currentIndex = 1   // 切到 Chat Tab
+    }
+  }
 
   aboutToAppear(): void {
     console.log('ooo这是混淆测试')
