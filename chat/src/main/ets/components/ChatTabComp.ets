@@ -6,7 +6,7 @@ import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
 import { WindowUtil, ThemeState, getThemeState } from 'common'
 import { saveSession, loadSessions } from '../utils/ChatPersist'
-import { ChatSession, ChatMessage } from '../models/chatModel'
+import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
 import { ChatLoadState, getChatLoadState } from '../viewmodel/ChatLoadState'
 
 @ComponentV2
@@ -23,7 +23,6 @@ export struct ChatTabComp {
   private mainWindow: window.Window | null = null
 
   aboutToAppear(): void {
-    // 默认新会话；如果历史页已经设置了 pendingSessionId，下面会立刻加载历史会话覆盖
     if (!this.vm.sessionId) {
       this.vm.sessionId = Date.now().toString()
     }
@@ -35,7 +34,6 @@ export struct ChatTabComp {
 
     this.initKeyboardListener()
 
-    // App 启动或页面创建时，如果 pendingSessionId 已存在，主动加载一次兜底
     if (this.chatLoadState.pendingSessionId) {
       this.loadSession(this.chatLoadState.pendingSessionId)
       this.chatLoadState.pendingSessionId = ''
@@ -83,10 +81,8 @@ export struct ChatTabComp {
   /**
    * 加载指定历史会话。
    *
-   * 重点：
-   * 1. 从持久化里拿出来的数据可能是普通 plain object。
-   * 2. 必须重新 new ChatMessage，否则 @Trace content 可能不稳定。
-   * 3. 所有字段做兜底，避免 content / messages / id 为 undefined。
+   * 持久化里读出来的是 ChatMessagePlain 普通对象。
+   * UI 层必须重新 new ChatMessage，恢复 @ObservedV2 / @Trace 能力。
    */
   private loadSession(id: string): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
@@ -105,7 +101,7 @@ export struct ChatTabComp {
     }
 
     const restored: ChatMessage[] = []
-    const sourceMessages: ChatMessage[] = target.messages ? target.messages : []
+    const sourceMessages: ChatMessagePlain[] = target.messages ? target.messages : []
 
     for (let i = 0; i < sourceMessages.length; i++) {
       const plain = sourceMessages[i]
@@ -122,9 +118,8 @@ export struct ChatTabComp {
 
     this.vm.sessionId = target.id ? target.id : id
     this.vm.historyMessage = restored
-
-    // 加载历史会话后，必须清理输入框和 loading 状态
-    this.vm.resetRuntimeState()
+    this.vm.inputContent = ''
+    this.vm.isLoading = false
   }
 
   /**
@@ -141,8 +136,10 @@ export struct ChatTabComp {
   /**
    * 持久化当前会话。
    *
-   * 重点：
-   * content 做空值防御，避免 substring / length 再次触发 undefined 报错。
+   * 关键修复：
+   * 不能直接保存 this.vm.historyMessage。
+   * 因为 ChatMessage.content 是 @Trace 字段，JSON.stringify 会丢。
+   * 所以这里必须逐条转成 ChatMessagePlain。
    */
   private persistSession(): void {
     if (this.vm.historyMessage.length === 0) {
@@ -155,31 +152,51 @@ export struct ChatTabComp {
       return
     }
 
-    const messages = this.vm.historyMessage
+    const sourceMessages = this.vm.historyMessage
+    const plainMessages: ChatMessagePlain[] = []
 
-    const firstUser = messages.find((m: ChatMessage) => m.role === 'user')
+    for (let i = 0; i < sourceMessages.length; i++) {
+      const source = sourceMessages[i]
+
+      const plain = new ChatMessagePlain()
+      plain.id = source.id ? source.id : `${this.vm.sessionId}_${i}`
+      plain.role = source.role ? source.role : 'assistant'
+      plain.content = source.content ? source.content : ''
+      plain.createTime = source.createTime ? source.createTime : Date.now()
+      plain.sessionId = source.sessionId ? source.sessionId : this.vm.sessionId
+
+      plainMessages.push(plain)
+    }
+
+    if (plainMessages.length === 0) {
+      return
+    }
+
+    const firstUser = plainMessages.find((m: ChatMessagePlain) => m.role === 'user')
     const firstContent = firstUser && firstUser.content ? firstUser.content : ''
 
     const title = firstContent.length > 0
       ? firstContent.substring(0, 20) + (firstContent.length > 20 ? '...' : '')
       : '新对话'
 
-    const last = messages[messages.length - 1]
+    const last = plainMessages[plainMessages.length - 1]
     const lastContent = last && last.content ? last.content : ''
 
-    const preview = lastContent.substring(0, 30) + (lastContent.length > 30 ? '...' : '')
+    const preview = lastContent.length > 0
+      ? lastContent.substring(0, 30) + (lastContent.length > 30 ? '...' : '')
+      : '暂无回复'
 
-    const first = messages[0]
+    const first = plainMessages[0]
     const createTime = first && first.createTime ? first.createTime : Date.now()
     const updateTime = last && last.createTime ? last.createTime : Date.now()
 
-    const session: ChatSession = new ChatSession()
+    const session = new ChatSession()
     session.id = this.vm.sessionId ? this.vm.sessionId : Date.now().toString()
     session.title = title
     session.preview = preview
     session.createTime = createTime
     session.updateTime = updateTime
-    session.messages = messages
+    session.messages = plainMessages
 
     saveSession(ctx, session)
   }
