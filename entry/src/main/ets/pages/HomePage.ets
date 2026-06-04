@@ -7,40 +7,40 @@ import { ChatTabComp } from 'chat'
 import { ProfileTabComp } from '../components/ProfileTabComp'
 import { WindowUtil } from 'common'
 import { AuthPersist, getAuthPersist } from '../utils/AuthPersist'
+import { ThemeState, getThemeState } from '../viewmodel/ThemeState'
+
 @HMRouter({ pageUrl: EntryRoutes.PAGE_HOME })
 @ComponentV2
 export struct HomePage {
   @Local tabState: AppTabState =
     AppStorageV2.connect(AppTabState, 'AppTabState', () => new AppTabState())!
-
-  /**
-   * 底部安全区高度（vp）
-   * 手势条 / 虚拟导航键的高度，TabBar 需要额外占位防止被遮挡
-   * 由 WindowUtil.init() 在 EntryAbility 里写入 AppStorage
-   */
   @Local bottomAvoid: number = WindowUtil.getBottomAvoidHeight()
-  /*
-   * provider 爷孙组件 provider注册,子组件consumer获取
-   * */
-  @Provider() auth: AuthPersist = getAuthPersist()   // ← 新增
+
+  // Provider 1：登录状态，供所有 Tab 消费
+  @Provider() auth: AuthPersist = getAuthPersist()
+
+  // Provider 2：主题状态，供所有 Tab 消费；PersistenceV2 单例，重启后恢复
+  @Provider() theme: ThemeState = getThemeState()
+
   aboutToAppear(): void {
     console.log('ooo这是混淆测试')
   }
+
   @Builder
   tabBarItem(index: number, label: string, icon: string) {
     Column({ space: 4 }) {
       Text(icon)
         .fontSize(22)
-        .fontColor(this.tabState.currentIndex === index ? '#007DFF' : '#AAAAAA')
+        .fontColor(this.tabState.currentIndex === index ? '#007DFF' : this.theme.tabInactive)
       Text(label)
         .fontSize(10)
-        .fontColor(this.tabState.currentIndex === index ? '#007DFF' : '#AAAAAA')
+        .fontColor(this.tabState.currentIndex === index ? '#007DFF' : this.theme.tabInactive)
     }
     .width('100%')
     .height('100%')
-    // 把图标和文字往上推，让内容出现在手势条上方
     .padding({ bottom: this.bottomAvoid })
     .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.theme.surface)
   }
 
   build() {
@@ -64,9 +64,8 @@ export struct HomePage {
     }
     .width('100%')
     .height('100%')
-    // barHeight = 固定内容区 56 + 底部手势条高度
     .barHeight(56 + this.bottomAvoid)
-    .divider({ strokeWidth: 0.5, color: '#E8E8E8' })
+    .divider({ strokeWidth: 0.5, color: this.theme.divider })
     .onChange((index: number) => {
       this.tabState.currentIndex = index
     })
