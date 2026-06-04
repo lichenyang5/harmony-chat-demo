@@ -1,6 +1,6 @@
 import { http } from '@kit.NetworkKit'
 import { ApiConstants } from '../constants/ApiConstants'
-import { ApiResponse } from '../models/chatModel'
+import { ApiResponse } from '../models/commonModel'
 
 export class HttpUtil {
   static post<T>(path: string, body: Record<string, Object>): Promise<ApiResponse<T>> {

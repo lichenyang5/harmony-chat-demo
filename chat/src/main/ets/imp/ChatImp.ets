@@ -1,6 +1,7 @@
-import { ApiConstants } from '../constants/ApiConstants'
-import { ApiResponse, ChatMessage } from '../models/chatModel'
-import { HttpUtil } from '../utils/HttpUtil'
+import { ApiConstants } from 'common'
+import { ApiResponse } from 'common'
+import { ChatMessage } from '../models/chatModel'
+import { HttpUtil } from 'common'
 
 export class ChatImp {
   sendMessage(content: string, sessionId?: string): Promise<ApiResponse<ChatMessage>> {

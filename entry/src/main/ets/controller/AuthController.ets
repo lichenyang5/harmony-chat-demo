@@ -1,9 +1,8 @@
 import { AuthBiz } from '../biz/AuthBiz'
 import { LoginRequest } from '../models/userModel'
 import { AuthViewModel } from '../viewmodel/AuthViewModel'
-import { HMUtil } from '../utils/HMUtil'
+import { HMUtil } from 'common'
 import { saveAuth } from '../utils/AuthPersist'
-import { route } from '../constants/HMConstants'
 
 export class AuthController {
   private biz: AuthBiz = new AuthBiz()

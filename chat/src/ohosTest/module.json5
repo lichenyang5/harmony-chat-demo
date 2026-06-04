@@ -1,0 +1,11 @@
+{
+  "module": {
+    "name": "chat_test",
+    "type": "feature",
+    "deviceTypes": [
+      "default"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false
+  }
+}

@@ -1,5 +1,6 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouterMgr, HMPopInfo } from '@hadss/hmrouter'
-import { route, NAV_ID } from '../constants/HMConstants'
+import { NAV_ID } from 'common'
 import { Product, MOCK_PRODUCTS } from '../models/productModel'
 import { AuthPersist } from '../utils/AuthPersist'
 @ComponentV2
@@ -13,7 +14,7 @@ export struct HomeTabComp {
     HMRouterMgr.push(
       {
         navigationId: NAV_ID,
-        pageUrl: route.PAGE_PRODUCT_DETAIL,
+        pageUrl: EntryRoutes.PAGE_PRODUCT_DETAIL,
         param: product          // ← 路由传参：把整个 Product 对象传给详情页
       },
       {

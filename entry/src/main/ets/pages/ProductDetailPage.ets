@@ -1,10 +1,10 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouter } from '@hadss/hmrouter'
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { HMLifecycleState } from '@hadss/hmrouter'
-import { route } from '../constants/HMConstants'
 import { Product } from '../models/productModel'
 
-@HMRouter({ pageUrl: route.PAGE_PRODUCT_DETAIL })
+@HMRouter({ pageUrl: EntryRoutes.PAGE_PRODUCT_DETAIL })
 @ComponentV2
 export struct ProductDetailPage {
   @Local product: Product = new Product()

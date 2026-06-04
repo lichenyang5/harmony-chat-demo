@@ -1,14 +1,14 @@
+import { ChatRoutes } from '../constants/ChatRoutes'
 import { HMRouter, HMRouterMgr, HMParamType } from '@hadss/hmrouter'
-import { HMUtil } from '../utils/HMUtil'
+import { HMUtil } from 'common'
 import { ChatController } from '../controller/ChatController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from '../components/ChatListComp'
 import { ChatInputComp } from '../components/ChatInputComp'
 import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
-import { route } from '../constants/HMConstants'
 import { ChatSession } from '../models/chatModel'
 
-@HMRouter({ pageUrl: route.PAGE_CHAT })
+@HMRouter({ pageUrl: ChatRoutes.PAGE_CHAT })
 @ComponentV2
 export struct ChatPage {
   @Local vm: ChatViewModel = new ChatViewModel()

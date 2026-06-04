@@ -1,3 +1,4 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import {
   HMInterceptor,
   HMInterceptorAction,
@@ -6,7 +7,6 @@ import {
   IHMInterceptor
 } from '@hadss/hmrouter'
 import { hasToken } from '../utils/AuthPersist'
-import { route } from '../constants/HMConstants'
 
 @HMInterceptor({ interceptorName: 'AuthInterceptor', priority: 99 })
 export class AuthInterceptor implements IHMInterceptor {
@@ -18,7 +18,7 @@ export class AuthInterceptor implements IHMInterceptor {
     }
 
     console.log('[AuthInterceptor] 未登录，弹登录提示')
-    HMRouterMgr.push({ pageUrl: route.DIALOG_LOGIN_PROMPT })
+    HMRouterMgr.push({ pageUrl: EntryRoutes.DIALOG_LOGIN_PROMPT })
     return HMInterceptorAction.DO_REJECT   // 拦截原跳转
   }
 }

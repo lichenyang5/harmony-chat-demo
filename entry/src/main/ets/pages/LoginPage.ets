@@ -1,11 +1,11 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouter } from '@hadss/hmrouter'
 import { AuthController } from '../controller/AuthController'
 import { AuthViewModel } from '../viewmodel/AuthViewModel'
 import { hasToken } from '../utils/AuthPersist'
-import { HMUtil } from '../utils/HMUtil'
-import { route } from '../constants/HMConstants'
+import { HMUtil } from 'common'
 
-@HMRouter({ pageUrl: route.PAGE_LOGIN })
+@HMRouter({ pageUrl: EntryRoutes.PAGE_LOGIN })
 @ComponentV2
 export struct Login {
   @Local vm: AuthViewModel = new AuthViewModel()

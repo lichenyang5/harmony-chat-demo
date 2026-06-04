@@ -6,11 +6,7 @@ export class ChatMessage {
   sessionId: string = ''
 }
 
-export class ApiResponse<T> {
-  code: number = 0
-  message: string = ''
-  data: T | null = null
-}
+// ApiResponse 已迁移到 common HAR (commonModel.ets)，此处删除避免重复
 
 export class ChatSession {
   id: string = ''           // 会话唯一 ID（时间戳字符串）

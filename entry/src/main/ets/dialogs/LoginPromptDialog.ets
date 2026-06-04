@@ -1,7 +1,7 @@
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
-import { route } from '../constants/HMConstants'
 
-@HMRouter({ pageUrl: route.DIALOG_LOGIN_PROMPT, dialog: true })
+@HMRouter({ pageUrl: EntryRoutes.DIALOG_LOGIN_PROMPT, dialog: true })
 @ComponentV2
 export struct LoginPromptDialog {
 
@@ -32,7 +32,7 @@ export struct LoginPromptDialog {
             .margin({ left: 12 })
             .onClick(() => {
               HMRouterMgr.pop()   // 先关 dialog
-              HMRouterMgr.push({ pageUrl: route.PAGE_LOGIN })  // 再去登录页
+              HMRouterMgr.push({ pageUrl: EntryRoutes.PAGE_LOGIN })  // 再去登录页
             })
         }
         .width('100%')
