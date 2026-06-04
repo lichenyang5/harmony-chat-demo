@@ -1,19 +1,22 @@
 import { http } from '@kit.NetworkKit'
 import { ApiConstants, SseHttpUtil, SseCallbacks } from 'common'
+import { ChatHistoryItem } from '../models/chatModel'
 
 export class ChatImp {
   /**
    * 流式发送消息
-   * @returns HttpRequest 实例，调用方可以保存它，用于中断（destroy）
+   * @param history 已有对话历史（多轮上下文）
    */
   sendMessageStream(
     content: string,
     sessionId: string | undefined,
+    history: ChatHistoryItem[],
     callbacks: SseCallbacks
   ): http.HttpRequest {
     const body: Record<string, Object> = {
       'inputContent': content,
-      'sessionId': sessionId ?? ''
+      'sessionId': sessionId ?? '',
+      'history': history
     }
     return SseHttpUtil.postStream(ApiConstants.CHAT, body, callbacks)
   }

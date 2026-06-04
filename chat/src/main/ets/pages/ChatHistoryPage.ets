@@ -4,6 +4,7 @@ import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
 import { loadSessions, deleteSession } from '../utils/ChatPersist'
 import { NAV_ID, HMUtil, ThemeState, getThemeState } from 'common'
+import { getChatLoadState } from '../viewmodel/ChatLoadState'
 
 @HMRouter({
   pageUrl: ChatRoutes.PAGE_CHAT_HISTORY,
@@ -159,7 +160,13 @@ export struct ChatHistoryPage {
             // swipeAction：左滑显示删除按钮（鸿蒙 ListItem 内置手势）
             .swipeAction({ end: this.deleteButton(session.id) })
             .onClick(() => {
-              // 点击进入历史会话（只读模式，后续可扩展继续对话）
+              // 切换到 Chat Tab 继续聊：
+              // 1. 设置全局信号让 ChatTabComp 加载该会话
+              // 2. pop 回 Home（HomePage 监听信号后切到 Chat Tab）
+              getChatLoadState().pendingSessionId = session.id
+              HMUtil.pop()
+              return
+              // 旧路径：push ChatPage 只读查看（保留代码作为对比）
               HMRouterMgr.push({
                 navigationId: NAV_ID,
                 pageUrl: ChatRoutes.PAGE_CHAT,

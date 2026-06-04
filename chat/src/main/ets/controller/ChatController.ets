@@ -1,42 +1,33 @@
 import { http } from '@kit.NetworkKit'
 import { SseDoneMeta } from 'common'
 import { ChatBiz } from '../biz/ChatBiz'
-import { ChatMessage } from '../models/chatModel'
+import { ChatMessage, ChatHistoryItem } from '../models/chatModel'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 
 /**
  * ChatController
  *
- * 重点：
- * 1. 网络层负责接收 SSE chunk
- * 2. Controller 不再把 chunk 直接一次性塞给 UI
- * 3. Controller 内部维护 typingBuffer
- * 4. UI 每隔 typingDelay 只追加一个字符，形成真正的打字机效果
+ * 流式设计（参考主流 AI 助手）：
+ * 1. 发送时往 historyMessage push 两条：用户消息 + 空的 AI 占位消息
+ * 2. 保留对 AI 占位消息的引用 activeAiMessage
+ * 3. 每收到一个 chunk，直接 activeAiMessage.content += chunk
+ *    @Trace content 自动触发对应 MessageBubble 重渲染
+ * 4. 流结束时清理引用，loading 退出
+ *
+ * 为什么不要前端打字机：
+ * - 后端已经按 50ms/字 流式推送，是真打字速度
+ * - 前端再加打字机会变成"网络已结束但 UI 还在打"的脱节状态
+ * - 中断时也会有"缓冲区还有字没出来"的尴尬
  */
 export class ChatController {
   private biz: ChatBiz = new ChatBiz()
   private vm: ChatViewModel
 
-  // 当前流式请求引用，用于中断
+  // 当前流式请求引用，用于阶段 3 中断
   private currentRequest: http.HttpRequest | null = null
 
-  // 等待被“打字机”消费的文本缓冲区
-  private typingBuffer: string = ''
-
-  // 网络是否已经结束
-  private networkDone: boolean = false
-
-  // 网络结束时返回的 meta，等打字机打完后再真正入历史消息
-  private pendingDoneMeta: SseDoneMeta = {}
-
-  // 是否正在执行打字机
-  private typingRunning: boolean = false
-
-  // 定时器 ID
-  private typingTimer: number = -1
-
-  // 打字速度：越小越快
-  private readonly typingDelay: number = 45
+  // 当前正在累积内容的 AI 消息引用
+  private activeAiMessage: ChatMessage | null = null
 
   constructor(vm: ChatViewModel) {
     this.vm = vm
@@ -44,59 +35,88 @@ export class ChatController {
 
   sendMessage(): void {
     const content = this.vm.inputContent.trim()
-
     if (!content || this.vm.isLoading) {
       return
     }
 
-    // 1. 用户消息推入历史
+    // 1. 用户消息
     const userMessage = new ChatMessage()
-    userMessage.id = Date.now().toString()
+    userMessage.id = `${Date.now()}_user`
     userMessage.role = 'user'
     userMessage.content = content
     userMessage.createTime = Date.now()
+    userMessage.sessionId = this.vm.sessionId
 
+    // 2. AI 占位消息（内容空，等流式追加）
+    const aiMessage = new ChatMessage()
+    aiMessage.id = `${Date.now()}_ai`
+    aiMessage.role = 'assistant'
+    aiMessage.content = ''
+    aiMessage.createTime = Date.now()
+    aiMessage.sessionId = this.vm.sessionId
+
+    // 3. 先构造历史快照（必须在 push 当前对话之前，否则后端会把本次 user 也算进历史）
+    const historySnapshot: ChatHistoryItem[] = this.vm.historyMessage
+      .filter(m => m.content.length > 0)
+      .map(m => {
+        const item = new ChatHistoryItem()
+        item.role = m.role
+        item.content = m.content
+        return item
+      })
+
+    // 4. push 两条到历史；持有 AI 消息引用便于追加
     this.vm.historyMessage.push(userMessage)
+    this.vm.historyMessage.push(aiMessage)
+    this.activeAiMessage = aiMessage
 
-    // 2. 清空输入框
+    // 5. 清输入框 + 进入 loading
     this.vm.inputContent = ''
-
-    // 3. 初始化本次 AI 回复状态
-    this.resetTypingState()
     this.vm.isLoading = true
-    this.vm.streamingContent = ''
 
-    // 4. 发起流式请求
+    // 6. 发起 SSE 流式请求
     this.currentRequest = this.biz.sendMessageStream(
       content,
       this.vm.sessionId || undefined,
+      historySnapshot,
       {
         onChunk: (chunk: string) => {
-          // 注意：
-          // 这里不要直接 this.vm.streamingContent += chunk
-          // 否则多个 chunk 在一次 dataReceive 里同步追加，UI 会表现成“一下子全出来”
-          this.enqueueTypingText(chunk)
+          if (!this.activeAiMessage) return
+
+          // 关键：直接修改 @Trace content
+          // 由 ChatMessage 的 @ObservedV2 触发对应气泡重渲染
+          this.activeAiMessage.content += chunk
+
+          // isLoading 现在贯穿整个生成期，
+          // 由 onDone / onError / stopGeneration 统一关闭。
+          // 这样发送 / 停止按钮的切换能覆盖整个流式过程。
         },
 
         onDone: (meta: SseDoneMeta) => {
-          // 网络结束不代表 UI 打字结束
-          // 这里只记录结束状态，等 typingBuffer 全部打完再入历史消息
-          this.networkDone = true
-          this.pendingDoneMeta = meta
-
-          if (!this.typingRunning && this.typingBuffer.length === 0) {
-            this.finishAiMessage()
+          // 更新会话 ID（首次会话时后端给出）
+          if (meta.sessionId) {
+            this.vm.sessionId = meta.sessionId
+            if (this.activeAiMessage) {
+              this.activeAiMessage.sessionId = meta.sessionId
+            }
           }
+          if (meta.messageId && this.activeAiMessage) {
+            this.activeAiMessage.id = meta.messageId
+          }
+
+          this.vm.isLoading = false
+          this.activeAiMessage = null
+          this.currentRequest = null
         },
 
         onError: (errMsg: string) => {
           console.error('[ChatController] stream error', errMsg)
 
-          this.clearTypingTimer()
-          this.resetTypingState()
-
-          this.vm.streamingContent = ''
+          if (this.activeAiMessage) {
+            this.activeAiMessage.content = '生成失败，请稍后重试'
+          }
           this.vm.isLoading = false
+          this.activeAiMessage = null
           this.currentRequest = null
         }
       }
@@ -104,133 +124,21 @@ export class ChatController {
   }
 
   /**
-   * 把网络 chunk 放进打字机缓冲区
-   */
-  private enqueueTypingText(chunk: string): void {
-    if (!chunk) {
-      return
-    }
-
-    this.typingBuffer += chunk
-    this.startTyping()
-  }
-
-  /**
-   * 启动打字机
-   */
-  private startTyping(): void {
-    if (this.typingRunning) {
-      return
-    }
-
-    this.typingRunning = true
-    this.typeNext()
-  }
-
-  /**
-   * 每次只从 typingBuffer 取一个字符追加到 streamingContent
-   */
-  private typeNext(): void {
-    if (this.typingBuffer.length > 0) {
-      const nextChar = this.typingBuffer.substring(0, 1)
-      this.typingBuffer = this.typingBuffer.substring(1)
-
-      this.vm.streamingContent += nextChar
-
-      this.typingTimer = setTimeout(() => {
-        this.typingTimer = -1
-        this.typeNext()
-      }, this.typingDelay)
-
-      return
-    }
-
-    this.typingRunning = false
-
-    // 网络已经结束，并且打字机也打完了，这时才真正把 AI 消息入历史
-    if (this.networkDone) {
-      this.finishAiMessage()
-    }
-  }
-
-  /**
-   * AI 回复完成：把 streamingContent 转成一条正式历史消息
-   */
-  private finishAiMessage(): void {
-    const meta = this.pendingDoneMeta
-
-    if (this.vm.streamingContent.length > 0) {
-      const aiMessage = new ChatMessage()
-      aiMessage.id = meta.messageId ?? Date.now().toString()
-      aiMessage.role = 'assistant'
-      aiMessage.content = this.vm.streamingContent
-      aiMessage.createTime = Date.now()
-      aiMessage.sessionId = meta.sessionId ?? this.vm.sessionId
-
-      this.vm.historyMessage.push(aiMessage)
-    }
-
-    if (meta.sessionId) {
-      this.vm.sessionId = meta.sessionId
-    }
-
-    this.vm.streamingContent = ''
-    this.vm.isLoading = false
-    this.currentRequest = null
-
-    this.resetTypingState()
-  }
-
-  /**
-   * 阶段 3：中断当前生成
+   * 中断生成（阶段 3 接入按钮调用）
    */
   stopGeneration(): void {
-    if (!this.currentRequest) {
-      return
-    }
-
-    try {
-      this.currentRequest.destroy()
-    } catch (_) {}
-
-    this.currentRequest = null
-    this.clearTypingTimer()
-
-    const partialContent = this.vm.streamingContent + this.typingBuffer
-
-    if (partialContent.length > 0) {
-      const partial = new ChatMessage()
-      partial.id = Date.now().toString()
-      partial.role = 'assistant'
-      partial.content = partialContent + '\n\n[已停止]'
-      partial.createTime = Date.now()
-      partial.sessionId = this.vm.sessionId
-
-      this.vm.historyMessage.push(partial)
-    }
-
-    this.vm.streamingContent = ''
-    this.vm.isLoading = false
-
-    this.resetTypingState()
-  }
-
-  private clearTypingTimer(): void {
-    if (this.typingTimer !== -1) {
+    if (this.currentRequest) {
       try {
-        clearTimeout(this.typingTimer)
+        this.currentRequest.destroy()
       } catch (_) {}
-
-      this.typingTimer = -1
+      this.currentRequest = null
     }
-  }
 
-  private resetTypingState(): void {
-    this.clearTypingTimer()
+    if (this.activeAiMessage) {
+      this.activeAiMessage.content += '\n\n[已停止]'
+      this.activeAiMessage = null
+    }
 
-    this.typingBuffer = ''
-    this.networkDone = false
-    this.pendingDoneMeta = {}
-    this.typingRunning = false
+    this.vm.isLoading = false
   }
 }
