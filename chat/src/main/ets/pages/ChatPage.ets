@@ -1,115 +1,95 @@
 import { ChatRoutes } from '../constants/ChatRoutes'
 import { HMRouter, HMRouterMgr, HMParamType } from '@hadss/hmrouter'
+import { KeyboardAvoidMode } from '@kit.ArkUI'
+import { common } from '@kit.AbilityKit'
 import { HMUtil, ThemeState, getThemeState } from 'common'
 import { ChatController } from '../controller/ChatController'
+import { ChatSessionController } from '../controller/ChatSessionController'
+import { KeyboardController } from '../controller/KeyboardController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from '../components/ChatListComp'
 import { ChatInputComp } from '../components/ChatInputComp'
-import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
-import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
+import { ChatSession } from '../models/chatModel'
 
+/**
+ * 聊天独立页面（可从 ChatHistoryPage push 进来查看历史会话）。
+ *
+ * 职责：纯 UI 渲染（消息列表、输入框、顶部栏、历史记录抽屉）。
+ * 会话恢复委托给 ChatSessionController，
+ * 消息收发委托给 ChatController，
+ * 键盘监听委托给 KeyboardController。
+ */
 @HMRouter({ pageUrl: ChatRoutes.PAGE_CHAT })
 @ComponentV2
 export struct ChatPage {
+  /** 聊天页面视图状态（消息列表、输入内容、loading、sessionId）*/
   @Local vm: ChatViewModel = new ChatViewModel()
-  @Local controller: ChatController = new ChatController(this.vm)
 
+  /** 历史记录抽屉是否显示 */
   @Local showDrawer: boolean = false
+
+  /** 软键盘当前高度（vp），用于动态 padding 避免遮挡输入框 */
   @Local keyboardHeight: number = 0
+
+  /** 全局主题（亮色/暗黑）*/
   @Local theme: ThemeState = getThemeState()
 
-  private mainWindow: window.Window | null = null
+  @Local controller: ChatController = new ChatController(this.vm)
+
+  /** 会话管理控制器（恢复、初始化 session ID）*/
+  private sessionController: ChatSessionController = new ChatSessionController(this.vm)
+
+  /** 键盘监听控制器（注册/注销 keyboardHeightChange 事件）*/
+  private keyboardController: KeyboardController = new KeyboardController()
+
+  // ─── 生命周期 ──────────────────────────────────────────────────────────────
 
   aboutToAppear(): void {
+    // 尝试从路由参数读取历史会话（由 ChatHistoryPage push 时携带）
     const session = HMRouterMgr.getCurrentParam(HMParamType.routeParam) as ChatSession | null
 
     if (session && session.messages && session.messages.length > 0) {
-      this.restoreSession(session)
+      // 恢复历史会话：将 ChatMessagePlain 列表转换为 ChatMessage（@ObservedV2）
+      this.sessionController.restoreSession(session)
     } else {
-      if (!this.vm.sessionId) {
-        this.vm.sessionId = Date.now().toString()
-      }
+      // 无历史参数：新会话，生成时间戳 sessionId
+      this.sessionController.initSession()
     }
 
+    // 禁用系统默认的键盘顶起模式，改用手动 padding 控制
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
     } catch (_) {
     }
 
-    this.initKeyboardListener()
+    // 启动键盘监听；收到高度变化时执行动画更新 padding
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    this.keyboardController.init(ctx, (heightVp: number, isShowing: boolean) => {
+      this.getUIContext().animateTo(
+        { duration: isShowing ? 300 : 250, curve: Curve.EaseOut },
+        () => {
+          this.keyboardHeight = heightVp
+        }
+      )
+    })
   }
 
   aboutToDisappear(): void {
+    // 恢复系统默认键盘模式，释放键盘监听资源
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
     } catch (_) {
     }
 
-    try {
-      this.mainWindow?.off('keyboardHeightChange')
-    } catch (_) {
-    }
-
-    this.mainWindow = null
+    this.keyboardController.dispose()
   }
 
-  private restoreSession(session: ChatSession): void {
-    const restored: ChatMessage[] = []
-    const sourceMessages: ChatMessagePlain[] = session.messages ? session.messages : []
-
-    for (let i = 0; i < sourceMessages.length; i++) {
-      const plain = sourceMessages[i]
-
-      const msg = new ChatMessage()
-      msg.id = plain.id ? plain.id : `${session.id}_${i}`
-      msg.role = plain.role ? plain.role : 'assistant'
-      msg.content = plain.content ? plain.content : ''
-      msg.createTime = plain.createTime ? plain.createTime : Date.now()
-      msg.sessionId = plain.sessionId ? plain.sessionId : session.id
-
-      restored.push(msg)
-    }
-
-    this.vm.historyMessage = restored
-    this.vm.sessionId = session.id ? session.id : Date.now().toString()
-    this.vm.inputContent = ''
-    this.vm.isLoading = false
-  }
-
-  private async initKeyboardListener(): Promise<void> {
-    try {
-      const ctx = this.getUIContext().getHostContext()
-
-      if (!ctx) {
-        return
-      }
-
-      const win = await window.getLastWindow(ctx)
-      this.mainWindow = win
-
-      win.on('keyboardHeightChange', (heightPx: number) => {
-        const heightVp = heightPx > 0
-          ? heightPx / display.getDefaultDisplaySync().densityPixels
-          : 0
-
-        this.getUIContext().animateTo(
-          {
-            duration: heightPx > 0 ? 300 : 250,
-            curve: Curve.EaseOut
-          },
-          () => {
-            this.keyboardHeight = heightVp
-          }
-        )
-      })
-    } catch (e) {
-      console.error('[ChatPage] keyboard listener failed', JSON.stringify(e))
-    }
-  }
+  // ─── UI ───────────────────────────────────────────────────────────────────
 
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column() {
+        // ── 顶部导航栏 ────────────────────────────────────────────────
         Row() {
           Text('←')
             .fontSize(22)
@@ -128,6 +108,7 @@ export struct ChatPage {
 
           Blank()
 
+          // 汉堡菜单按钮，控制历史记录抽屉的显隐
           Text('☰')
             .fontSize(22)
             .fontColor(this.theme.textPrimary)
@@ -142,9 +123,11 @@ export struct ChatPage {
         .backgroundColor(this.theme.surface)
         .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
+        // ── 消息列表 ──────────────────────────────────────────────────
         ChatListComp({ vm: this.vm })
           .layoutWeight(1)
 
+        // ── 输入框组件 ────────────────────────────────────────────────
         ChatInputComp({
           inputContent: this.vm.inputContent,
           isGenerating: this.vm.isLoading,
@@ -164,6 +147,7 @@ export struct ChatPage {
       .backgroundColor(this.theme.bg)
       .padding({ bottom: this.keyboardHeight })
 
+      // ── 历史记录侧边抽屉（从右侧划入）──────────────────────────────
       if (this.showDrawer) {
         Column() {
           Row() {

@@ -1,239 +1,125 @@
-import { window, display, KeyboardAvoidMode } from '@kit.ArkUI'
+import { KeyboardAvoidMode } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { ChatController } from '../controller/ChatController'
+import { ChatSessionController } from '../controller/ChatSessionController'
+import { KeyboardController } from '../controller/KeyboardController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
 import { WindowUtil, ThemeState, getThemeState } from 'common'
-import { saveSession, loadSessions } from '../utils/ChatPersist'
-import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
 import { ChatLoadState, getChatLoadState } from '../viewmodel/ChatLoadState'
 
+/**
+ * 聊天 Tab 组件（嵌入 HomePage 的 Tab 容器中）。
+ *
+ * 职责：纯 UI 渲染（消息列表、输入框、顶部栏）和状态监听。
+ * 会话管理逻辑委托给 ChatSessionController，
+ * 消息收发逻辑委托给 ChatController，
+ * 键盘监听委托给 KeyboardController。
+ */
 @ComponentV2
 export struct ChatTabComp {
+  /** 聊天页面视图状态（消息列表、输入内容、loading、sessionId）*/
   @Local vm: ChatViewModel = new ChatViewModel()
-  @Local controller: ChatController = new ChatController(this.vm)
 
+  /** 软键盘当前高度（vp），用于动态 padding 避免遮挡输入框 */
   @Local keyboardHeight: number = 0
+
+  /** 全局主题（亮色/暗黑）*/
   @Local theme: ThemeState = getThemeState()
 
-  // 跨页面信号：ChatHistory 点击会话时设置 pendingSessionId
+  /**
+   * 跨页面加载信号：
+   * ChatHistoryPage 点击某条会话时设置 pendingSessionId，
+   * 本组件通过 @Monitor 监听并加载对应会话。
+   */
   @Local chatLoadState: ChatLoadState = getChatLoadState()
 
-  private mainWindow: window.Window | null = null
+  /** 消息收发控制器 */
+  @Local controller: ChatController = new ChatController(this.vm)
+
+  /** 会话管理控制器（加载、新建、持久化） */
+  private sessionController: ChatSessionController = new ChatSessionController(this.vm)
+
+  /** 键盘监听控制器（注册/注销 keyboardHeightChange 事件）*/
+  private keyboardController: KeyboardController = new KeyboardController()
+
+  // ─── 生命周期 ──────────────────────────────────────────────────────────────
 
   aboutToAppear(): void {
-    if (!this.vm.sessionId) {
-      this.vm.sessionId = Date.now().toString()
-    }
+    // 初始化会话 ID（若为空则生成新 ID）
+    this.sessionController.initSession()
 
+    // 禁用系统默认的键盘顶起模式，改用手动 padding 控制
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
     } catch (_) {
     }
 
-    this.initKeyboardListener()
+    // 启动键盘监听；收到高度变化时执行动画更新 padding
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    this.keyboardController.init(ctx, (heightVp: number, isShowing: boolean) => {
+      this.getUIContext().animateTo(
+        { duration: isShowing ? 300 : 250, curve: Curve.EaseOut },
+        () => {
+          this.keyboardHeight = heightVp
+        }
+      )
+    })
 
+    // 若 App 刚启动时已有待加载会话（冷启动场景），立即加载
     if (this.chatLoadState.pendingSessionId) {
-      this.loadSession(this.chatLoadState.pendingSessionId)
+      this.sessionController.loadSessionById(this.chatLoadState.pendingSessionId, ctx)
       this.chatLoadState.pendingSessionId = ''
-    }
-  }
-
-  /**
-   * 监听跨页面信号：
-   * 从 ChatHistoryPage 点某条历史会话回来时，加载对应会话。
-   */
-  @Monitor('chatLoadState.pendingSessionId')
-  onPendingSessionChange(): void {
-    const id = this.chatLoadState.pendingSessionId
-
-    if (id) {
-      this.loadSession(id)
-      this.chatLoadState.pendingSessionId = ''
-    }
-  }
-
-  /**
-   * 流式结束时持久化当前会话。
-   */
-  @Monitor('vm.isLoading')
-  onLoadingChange(): void {
-    if (!this.vm.isLoading && this.vm.historyMessage.length > 0) {
-      this.persistSession()
     }
   }
 
   aboutToDisappear(): void {
+    // 恢复系统默认键盘模式，释放键盘监听资源
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
     } catch (_) {
     }
 
-    try {
-      this.mainWindow?.off('keyboardHeightChange')
-    } catch (_) {
-    }
+    this.keyboardController.dispose()
+  }
 
-    this.mainWindow = null
+  // ─── @Monitor 监听 ─────────────────────────────────────────────────────────
+
+  /**
+   * 监听跨页面信号：
+   * 从 ChatHistoryPage 点某条历史会话回到 HomePage 时，
+   * pendingSessionId 被设置，此处响应并加载对应会话。
+   */
+  @Monitor('chatLoadState.pendingSessionId')
+  onPendingSessionChange(): void {
+    const id = this.chatLoadState.pendingSessionId
+    if (id) {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+      this.sessionController.loadSessionById(id, ctx)
+      this.chatLoadState.pendingSessionId = ''
+    }
   }
 
   /**
-   * 加载指定历史会话。
-   *
-   * 持久化里读出来的是 ChatMessagePlain 普通对象。
-   * UI 层必须重新 new ChatMessage，恢复 @ObservedV2 / @Trace 能力。
+   * 监听 loading 状态：
+   * 流式生成结束（isLoading 从 true 变为 false）时自动持久化当前会话。
    */
-  private loadSession(id: string): void {
-    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-
-    if (!ctx) {
-      console.error('[ChatTabComp] loadSession: ctx is null')
-      return
-    }
-
-    const sessions = loadSessions(ctx)
-    const target = sessions.find((s: ChatSession) => s.id === id)
-
-    if (!target) {
-      console.warn('[ChatTabComp] session not found:', id)
-      return
-    }
-
-    const restored: ChatMessage[] = []
-    const sourceMessages: ChatMessagePlain[] = target.messages ? target.messages : []
-
-    for (let i = 0; i < sourceMessages.length; i++) {
-      const plain = sourceMessages[i]
-
-      const msg = new ChatMessage()
-      msg.id = plain.id ? plain.id : `${id}_${i}`
-      msg.role = plain.role ? plain.role : 'assistant'
-      msg.content = plain.content ? plain.content : ''
-      msg.createTime = plain.createTime ? plain.createTime : Date.now()
-      msg.sessionId = plain.sessionId ? plain.sessionId : id
-
-      restored.push(msg)
-    }
-
-    this.vm.sessionId = target.id ? target.id : id
-    this.vm.historyMessage = restored
-    this.vm.inputContent = ''
-    this.vm.isLoading = false
-  }
-
-  /**
-   * 新建会话。
-   */
-  private newSession(): void {
+  @Monitor('vm.isLoading')
+  onLoadingChange(): void {
     if (this.vm.isLoading) {
       return
     }
-
-    this.vm.resetForNewSession()
-  }
-
-  /**
-   * 持久化当前会话。
-   *
-   * 关键修复：
-   * 不能直接保存 this.vm.historyMessage。
-   * 因为 ChatMessage.content 是 @Trace 字段，JSON.stringify 会丢。
-   * 所以这里必须逐条转成 ChatMessagePlain。
-   */
-  private persistSession(): void {
-    if (this.vm.historyMessage.length === 0) {
-      return
-    }
-
+    // 流式结束，将会话写入 Preferences
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-
-    if (!ctx) {
-      return
-    }
-
-    const sourceMessages = this.vm.historyMessage
-    const plainMessages: ChatMessagePlain[] = []
-
-    for (let i = 0; i < sourceMessages.length; i++) {
-      const source = sourceMessages[i]
-
-      const plain = new ChatMessagePlain()
-      plain.id = source.id ? source.id : `${this.vm.sessionId}_${i}`
-      plain.role = source.role ? source.role : 'assistant'
-      plain.content = source.content ? source.content : ''
-      plain.createTime = source.createTime ? source.createTime : Date.now()
-      plain.sessionId = source.sessionId ? source.sessionId : this.vm.sessionId
-
-      plainMessages.push(plain)
-    }
-
-    if (plainMessages.length === 0) {
-      return
-    }
-
-    const firstUser = plainMessages.find((m: ChatMessagePlain) => m.role === 'user')
-    const firstContent = firstUser && firstUser.content ? firstUser.content : ''
-
-    const title = firstContent.length > 0
-      ? firstContent.substring(0, 20) + (firstContent.length > 20 ? '...' : '')
-      : '新对话'
-
-    const last = plainMessages[plainMessages.length - 1]
-    const lastContent = last && last.content ? last.content : ''
-
-    const preview = lastContent.length > 0
-      ? lastContent.substring(0, 30) + (lastContent.length > 30 ? '...' : '')
-      : '暂无回复'
-
-    const first = plainMessages[0]
-    const createTime = first && first.createTime ? first.createTime : Date.now()
-    const updateTime = last && last.createTime ? last.createTime : Date.now()
-
-    const session = new ChatSession()
-    session.id = this.vm.sessionId ? this.vm.sessionId : Date.now().toString()
-    session.title = title
-    session.preview = preview
-    session.createTime = createTime
-    session.updateTime = updateTime
-    session.messages = plainMessages
-
-    saveSession(ctx, session)
+    this.sessionController.persistSession(ctx)
   }
 
-  private async initKeyboardListener(): Promise<void> {
-    try {
-      const ctx = this.getUIContext().getHostContext()
-
-      if (!ctx) {
-        return
-      }
-
-      const win = await window.getLastWindow(ctx)
-      this.mainWindow = win
-
-      win.on('keyboardHeightChange', (heightPx: number) => {
-        const heightVp = heightPx > 0
-          ? heightPx / display.getDefaultDisplaySync().densityPixels
-          : 0
-
-        this.getUIContext().animateTo(
-          {
-            duration: heightPx > 0 ? 300 : 250,
-            curve: Curve.EaseOut
-          },
-          () => {
-            this.keyboardHeight = heightVp
-          }
-        )
-      })
-    } catch (e) {
-      console.error('[ChatTabComp] keyboard listener failed', JSON.stringify(e))
-    }
-  }
+  // ─── UI ───────────────────────────────────────────────────────────────────
 
   build() {
     Column() {
+      // ── 顶部栏：标题 + 新建会话按钮 ──────────────────────────────────
       Row() {
         Text('AI 助手')
           .fontSize(18)
@@ -244,10 +130,11 @@ export struct ChatTabComp {
 
         Text('+ 新会话')
           .fontSize(14)
+          // 生成中时置灰，防止打断流式请求
           .fontColor(this.vm.isLoading ? this.theme.textTertiary : this.theme.primary)
           .padding({ left: 12, right: 12, top: 6, bottom: 6 })
           .onClick(() => {
-            this.newSession()
+            this.sessionController.newSession()
           })
       }
       .width('100%')
@@ -256,9 +143,11 @@ export struct ChatTabComp {
       .backgroundColor(this.theme.surface)
       .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
+      // ── 消息列表 ────────────────────────────────────────────────────
       ChatListComp({ vm: this.vm })
         .layoutWeight(1)
 
+      // ── 输入框组件（发送/停止回调直接调用 controller）──────────────
       ChatInputComp({
         inputContent: this.vm.inputContent,
         isGenerating: this.vm.isLoading,
@@ -276,6 +165,7 @@ export struct ChatTabComp {
     .width('100%')
     .height('100%')
     .backgroundColor(this.theme.bg)
+    // 键盘弹出时，通过 padding 上移输入框，避免被遮挡
     .padding({
       bottom: this.keyboardHeight > 0
         ? Math.max(0, this.keyboardHeight - 56 - WindowUtil.getBottomAvoidHeight())

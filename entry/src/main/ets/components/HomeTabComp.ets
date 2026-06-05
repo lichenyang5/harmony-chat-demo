@@ -1,40 +1,39 @@
-import { EntryRoutes } from '../constants/EntryRoutes'
-import { HMRouterMgr, HMPopInfo } from '@hadss/hmrouter'
-import { NAV_ID } from 'common'
 import { Product, MOCK_PRODUCTS } from '../models/productModel'
 import { AuthPersist } from '../utils/AuthPersist'
 import { ThemeState } from '../viewmodel/ThemeState'
+import { HomeViewModel } from '../viewmodel/HomeViewModel'
+import { HomeController } from '../controller/HomeController'
 
+/**
+ * 首页 Tab 组件。
+ *
+ * 职责：纯 UI 渲染（商品网格、购物车角标、用户问候语）。
+ * 导航跳转和加购计数逻辑委托给 HomeController。
+ */
 @ComponentV2
 export struct HomeTabComp {
-  @Local cartCount: number = 0
+  /** 首页视图状态（购物车数量），由 controller 通过 onResult 回调累加 */
+  @Local vm: HomeViewModel = new HomeViewModel()
 
+  /** 来自父组件（HomePage）的登录凭证，用于展示用户名 */
   @Consumer() auth: AuthPersist = new AuthPersist()
+  /** 来自父组件（HomePage）的全局主题，用于动态颜色 */
   @Consumer() theme: ThemeState = new ThemeState()
 
-  private goDetail(product: Product): void {
-    HMRouterMgr.push(
-      {
-        navigationId: NAV_ID,
-        pageUrl: EntryRoutes.PAGE_PRODUCT_DETAIL,
-        param: product
-      },
-      {
-        onResult: (popInfo: HMPopInfo) => {
-          const addCount = popInfo.result as number
-          if (addCount > 0) {
-            this.cartCount += addCount
-          }
-        }
-      }
-    )
-  }
+  private controller: HomeController = new HomeController(this.vm)
 
+  // ─── UI ───────────────────────────────────────────────────────────────────
+
+  /**
+   * 单个商品卡片的 @Builder 模板。
+   * 点击时调用 controller.goDetail 跳转到详情页，
+   * 并在 onResult 中累加购物车数量。
+   */
   @Builder
   productCard(product: Product) {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column({ space: 6 }) {
-        // 占位图
+        // 图片占位块
         Row()
           .width('100%')
           .height(80)
@@ -69,6 +68,7 @@ export struct HomeTabComp {
         offsetY: 2
       })
 
+      // 标签角标（如"限时"、"新品"等）
       if (product.tag) {
         Text(product.tag)
           .fontSize(10)
@@ -79,13 +79,14 @@ export struct HomeTabComp {
       }
     }
     .onClick(() => {
-      this.goDetail(product)
+      // 跳转详情页；controller 内部注册 onResult，pop 时累加购物车
+      this.controller.goDetail(product)
     })
   }
 
   build() {
     Column() {
-      // 顶部栏
+      // ── 顶部栏：问候语 + 购物车角标 ──────────────────────────────────
       Row() {
         Column({ space: 2 }) {
           Text(this.auth.userName ? `你好，${this.auth.userName}` : '你好，游客')
@@ -101,12 +102,13 @@ export struct HomeTabComp {
 
         Blank()
 
+        // 购物车图标 + 数量角标
         Stack({ alignContent: Alignment.TopEnd }) {
           Text('🛒')
             .fontSize(24)
 
-          if (this.cartCount > 0) {
-            Text(`${this.cartCount}`)
+          if (this.vm.cartCount > 0) {
+            Text(`${this.vm.cartCount}`)
               .fontSize(10)
               .fontColor(this.theme.onDanger)
               .width(16)
@@ -122,7 +124,7 @@ export struct HomeTabComp {
       .padding({ left: 16, right: 16, top: 16, bottom: 12 })
       .backgroundColor(this.theme.bg)
 
-      // 商品网格
+      // ── 商品网格（两列）─────────────────────────────────────────────
       Grid() {
         ForEach(MOCK_PRODUCTS, (product: Product) => {
           GridItem() {

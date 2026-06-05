@@ -2,26 +2,40 @@ import { ChatRoutes } from '../constants/ChatRoutes'
 import { HMRouter, HMRouterMgr, HMLifecycleState } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
-import { loadSessions, deleteSession } from '../utils/ChatPersist'
-import { NAV_ID, HMUtil, ThemeState, getThemeState } from 'common'
-import { getChatLoadState } from '../viewmodel/ChatLoadState'
+import { HMUtil, ThemeState, getThemeState } from 'common'
+import { ChatHistoryController } from '../controller/ChatHistoryController'
 
+/**
+ * 消息记录列表页。
+ *
+ * 职责：纯 UI 渲染（会话列表、空状态、左滑删除）。
+ * 数据加载、删除、跳转、时间格式化委托给 ChatHistoryController。
+ *
+ * 受 AuthInterceptor 保护，未登录时会弹出登录提示。
+ */
 @HMRouter({
   pageUrl: ChatRoutes.PAGE_CHAT_HISTORY,
-  interceptors: ['AuthInterceptor'] // ← 通过 interceptorName 字符串引用
+  interceptors: ['AuthInterceptor']
 })
 @ComponentV2
 export struct ChatHistoryPage {
+  /** 当前展示的会话列表，由 controller.loadData 填充 */
   @Local sessions: ChatSession[] = []
+  /** 全局主题（亮色/暗黑），用于动态颜色 */
   @Local theme: ThemeState = getThemeState()
 
+  /** UIAbility 上下文，用于 Preferences 读写，在 aboutToAppear 中初始化 */
   private ctx: common.UIAbilityContext | null = null
+
+  private controller: ChatHistoryController = new ChatHistoryController()
+
+  // ─── 生命周期 ──────────────────────────────────────────────────────────────
 
   aboutToAppear(): void {
     this.ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
     this.loadData()
 
-    // 注册 onShown：每次页面被显示（包括从 ChatPage pop 回来）触发
+    // 注册 onShown：每次页面重新显示（包括从 ChatPage pop 回来）时刷新列表
     HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(
       HMLifecycleState.onShown,
       () => {
@@ -35,42 +49,29 @@ export struct ChatHistoryPage {
     HMRouterMgr.getCurrentLifecycleOwner()?.removeObserver(HMLifecycleState.onShown)
   }
 
+  // ─── 私有方法（薄封装，仅做参数准备，逻辑在 controller 中）──────────────────
+
+  /** 从 Preferences 加载会话列表并更新 UI */
   private loadData(): void {
     if (!this.ctx) {
       return
     }
-
-    this.sessions = loadSessions(this.ctx)
+    this.sessions = this.controller.loadData(this.ctx)
   }
 
+  /** 删除指定会话并更新本地列表 */
   private onDelete(sessionId: string): void {
     if (!this.ctx) {
       return
     }
-
-    deleteSession(this.ctx, sessionId)
-
-    // 直接从本地列表移除，不需要重新读文件
-    this.sessions = this.sessions.filter(s => s.id !== sessionId)
+    this.sessions = this.controller.deleteSession(this.ctx, sessionId, this.sessions)
   }
 
-  private formatTime(ms: number): string {
-    const d = new Date(ms)
-    const now = new Date()
-    const isToday = d.toDateString() === now.toDateString()
-
-    if (isToday) {
-      // 今天：只显示时分
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    }
-
-    // 其他：显示月/日
-    return `${d.getMonth() + 1}/${d.getDate()}`
-  }
+  // ─── UI ───────────────────────────────────────────────────────────────────
 
   build() {
     Column() {
-      // 顶部导航栏
+      // ── 顶部导航栏 ──────────────────────────────────────────────────
       Row() {
         Text('←')
           .fontSize(22)
@@ -93,7 +94,7 @@ export struct ChatHistoryPage {
       .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
       if (this.sessions.length === 0) {
-        // 空状态
+        // ── 空状态 ────────────────────────────────────────────────────
         Column({ space: 12 }) {
           Text('')
             .fontSize(48)
@@ -112,12 +113,12 @@ export struct ChatHistoryPage {
         .alignItems(HorizontalAlign.Center)
         .backgroundColor(this.theme.bg)
       } else {
-        // 历史会话列表
+        // ── 历史会话列表（支持左滑删除）──────────────────────────────
         List() {
           ForEach(this.sessions, (session: ChatSession) => {
             ListItem() {
               Row({ space: 12 }) {
-                // 头像（取标题第一个字）
+                // 头像：取会话标题第一个字
                 Text(session.title.charAt(0))
                   .width(44)
                   .height(44)
@@ -138,7 +139,8 @@ export struct ChatHistoryPage {
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                       .layoutWeight(1)
 
-                    Text(this.formatTime(session.updateTime))
+                    // 格式化时间（今天显示 HH:mm，历史显示 M/D）
+                    Text(this.controller.formatTime(session.updateTime))
                       .fontSize(12)
                       .fontColor(this.theme.textTertiary)
                   }
@@ -157,21 +159,11 @@ export struct ChatHistoryPage {
               .padding({ left: 16, right: 16, top: 14, bottom: 14 })
               .backgroundColor(this.theme.surface)
             }
-            // swipeAction：左滑显示删除按钮（鸿蒙 ListItem 内置手势）
+            // 左滑显示删除按钮（ListItem 内置手势）
             .swipeAction({ end: this.deleteButton(session.id) })
             .onClick(() => {
-              // 切换到 Chat Tab 继续聊：
-              // 1. 设置全局信号让 ChatTabComp 加载该会话
-              // 2. pop 回 Home（HomePage 监听信号后切到 Chat Tab）
-              getChatLoadState().pendingSessionId = session.id
-              HMUtil.pop()
-              return
-              // 旧路径：push ChatPage 只读查看（保留代码作为对比）
-              HMRouterMgr.push({
-                navigationId: NAV_ID,
-                pageUrl: ChatRoutes.PAGE_CHAT,
-                param: session
-              })
+              // 通过全局信号通知 ChatTabComp 加载该会话，然后 pop 回首页
+              this.controller.openSession(session.id)
             })
           })
         }
@@ -190,7 +182,9 @@ export struct ChatHistoryPage {
     .backgroundColor(this.theme.bg)
   }
 
-  // 左滑删除按钮（@Builder 必须用箭头函数，避免 this 丢失）
+  /**
+   * 左滑删除按钮（@Builder 必须用箭头函数，避免 this 丢失问题）。
+   */
   @Builder
   deleteButton(sessionId: string) {
     Button('删除')

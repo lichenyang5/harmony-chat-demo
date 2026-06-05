@@ -1,82 +1,44 @@
 import { EntryRoutes } from '../constants/EntryRoutes'
 import { HMRouter } from '@hadss/hmrouter'
 import { HMRouterMgr } from '@hadss/hmrouter'
-import { HMLifecycleState } from '@hadss/hmrouter'
-import { Product } from '../models/productModel'
 import { ThemeState, getThemeState } from '../viewmodel/ThemeState'
+import { ProductDetailViewModel } from '../viewmodel/ProductDetailViewModel'
+import { ProductDetailController } from '../controller/ProductDetailController'
 
+/**
+ * 商品详情页。
+ *
+ * 职责：纯 UI 渲染。所有业务逻辑（路由参数解析、生命周期观察、
+ * 加购管理）均委托给 ProductDetailController。
+ */
 @HMRouter({ pageUrl: EntryRoutes.PAGE_PRODUCT_DETAIL })
 @ComponentV2
 export struct ProductDetailPage {
-  @Local product: Product = new Product()
-  @Local addCount: number = 0
-  @Local lifecycleLog: string[] = []
+  /** 页面视图状态（商品、加购数量、生命周期日志），由 controller 读写 */
+  @Local vm: ProductDetailViewModel = new ProductDetailViewModel()
+  /** 全局主题（亮色/暗黑），用于动态颜色 */
   @Local theme: ThemeState = getThemeState()
 
-  // ─── 生命周期 ─────────────────────────────────────────────
+  private controller: ProductDetailController = new ProductDetailController(this.vm)
+
+  // ─── 生命周期 ──────────────────────────────────────────────────────────────
+
   aboutToAppear(): void {
-    // 1. 读取路由传参（push 时 param 字段传入的对象）
-    const param = HMRouterMgr.getCurrentParam()
-    if (param) {
-      this.product = param as Product
-    }
-
-    // 2. 注册页面生命周期观察者
-    // getCurrentLifecycleOwner() 返回当前页面的生命周期持有者
-    const owner = HMRouterMgr.getCurrentLifecycleOwner()
-    if (!owner) {
-      return
-    }
-
-    owner.addObserver(HMLifecycleState.onShown, () => {
-      this.appendLog('onShown ▶ 页面显示/从子页返回')
-    })
-
-    owner.addObserver(HMLifecycleState.onHidden, () => {
-      this.appendLog('onHidden ⏸ 页面隐藏（跳转子页时）')
-    })
-
-    owner.addObserver(HMLifecycleState.onDisAppear, () => {
-      this.appendLog('onDisAppear ✕ 页面销毁')
-    })
+    // 从路由传参中读取商品，并注册页面生命周期观察者
+    this.controller.initFromParam()
+    this.controller.initLifecycle()
   }
 
   aboutToDisappear(): void {
-    // 防止内存泄漏：组件销毁时移除所有观察者
-    const owner = HMRouterMgr.getCurrentLifecycleOwner()
-    owner?.removeObserver(HMLifecycleState.onShown)
-    owner?.removeObserver(HMLifecycleState.onHidden)
-    owner?.removeObserver(HMLifecycleState.onDisAppear)
+    // 移除生命周期观察者，防止内存泄漏
+    this.controller.removeLifecycle()
   }
 
-  private appendLog(msg: string): void {
-    const time = new Date().toLocaleTimeString()
+  // ─── UI ───────────────────────────────────────────────────────────────────
 
-    // 最多保留 5 条，超出时移除最旧的
-    if (this.lifecycleLog.length >= 5) {
-      this.lifecycleLog.shift()
-    }
-
-    this.lifecycleLog.push(`[${time}] ${msg}`)
-  }
-
-  // ─── 加购并返回 ────────────────────────────────────────────
-  private addToCart(): void {
-    this.addCount++
-
-    // setPopParam：设置 pop 时返回给调用方 onResult 的数据
-    HMRouterMgr.setPopParam(this.addCount)
-  }
-
-  private confirmAndBack(): void {
-    // pop 后，HomeTabComp 的 onResult 会收到 addCount
-    HMRouterMgr.pop()
-  }
-
-  // ─── UI ───────────────────────────────────────────────────
   build() {
     Column() {
-      // 顶部导航栏
+      // ── 顶部导航栏 ──────────────────────────────────────────────────────
       Row() {
         Text('←')
           .fontSize(22)
@@ -100,24 +62,24 @@ export struct ProductDetailPage {
 
       Scroll() {
         Column({ space: 12 }) {
-          // 商品封面
+          // ── 商品封面占位 ───────────────────────────────────────────────
           Row()
             .width('100%')
             .height(200)
             .backgroundColor(this.theme.placeholderBg)
 
-          // 商品信息卡
+          // ── 商品信息卡 ─────────────────────────────────────────────────
           Column({ space: 10 }) {
             Row() {
-              Text(`¥${this.product.price}`)
+              Text(`¥${this.vm.product.price}`)
                 .fontSize(26)
                 .fontColor(this.theme.danger)
                 .fontWeight(FontWeight.Bold)
 
               Blank()
 
-              if (this.product.tag) {
-                Text(this.product.tag)
+              if (this.vm.product.tag) {
+                Text(this.vm.product.tag)
                   .fontSize(12)
                   .fontColor(this.theme.primary)
                   .padding({ left: 8, right: 8, top: 3, bottom: 3 })
@@ -127,12 +89,12 @@ export struct ProductDetailPage {
             }
             .width('100%')
 
-            Text(this.product.name)
+            Text(this.vm.product.name)
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.theme.textPrimary)
 
-            Text(this.product.desc)
+            Text(this.vm.product.desc)
               .fontSize(14)
               .fontColor(this.theme.textSecondary)
               .lineHeight(22)
@@ -142,24 +104,24 @@ export struct ProductDetailPage {
           .backgroundColor(this.theme.surface)
           .borderRadius(12)
 
-          // ── 路由传参展示（学习用）──────────────────────
+          // ── 路由传参展示（学习用）──────────────────────────────────────
           Column({ space: 8 }) {
             Text('路由传参内容（getCurrentParam）')
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.theme.textPrimary)
 
-            Text(`id: ${this.product.id}`)
+            Text(`id: ${this.vm.product.id}`)
               .fontSize(12)
               .fontColor(this.theme.textSecondary)
               .fontFamily('monospace')
 
-            Text(`name: ${this.product.name}`)
+            Text(`name: ${this.vm.product.name}`)
               .fontSize(12)
               .fontColor(this.theme.textSecondary)
               .fontFamily('monospace')
 
-            Text(`price: ${this.product.price}`)
+            Text(`price: ${this.vm.product.price}`)
               .fontSize(12)
               .fontColor(this.theme.textSecondary)
               .fontFamily('monospace')
@@ -170,19 +132,19 @@ export struct ProductDetailPage {
           .borderRadius(10)
           .border({ width: 1, color: this.theme.infoBorder })
 
-          // ── 生命周期日志（学习用）─────────────────────
+          // ── 生命周期日志（学习用）─────────────────────────────────────
           Column({ space: 6 }) {
             Text('⏱ 页面生命周期日志（addObserver）')
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.theme.textPrimary)
 
-            if (this.lifecycleLog.length === 0) {
+            if (this.vm.lifecycleLog.length === 0) {
               Text('等待生命周期事件...')
                 .fontSize(12)
                 .fontColor(this.theme.textTertiary)
             } else {
-              ForEach(this.lifecycleLog, (log: string) => {
+              ForEach(this.vm.lifecycleLog, (log: string) => {
                 Text(log)
                   .fontSize(11)
                   .fontColor(this.theme.textSecondary)
@@ -197,7 +159,7 @@ export struct ProductDetailPage {
           .borderRadius(10)
           .border({ width: 1, color: this.theme.warningBorder })
 
-          // 加购区域
+          // ── 加购区域 ───────────────────────────────────────────────────
           Row({ space: 16 }) {
             Text('加购数量')
               .fontSize(14)
@@ -212,13 +174,10 @@ export struct ProductDetailPage {
               .backgroundColor(this.theme.secondaryButtonBg)
               .fontColor(this.theme.secondaryButtonText)
               .onClick(() => {
-                if (this.addCount > 0) {
-                  this.addCount--
-                  HMRouterMgr.setPopParam(this.addCount)
-                }
+                this.controller.decreaseCart()
               })
 
-            Text(`${this.addCount}`)
+            Text(`${this.vm.addCount}`)
               .fontSize(18)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.theme.textPrimary)
@@ -232,7 +191,7 @@ export struct ProductDetailPage {
               .backgroundColor(this.theme.primary)
               .fontColor(this.theme.onPrimary)
               .onClick(() => {
-                this.addToCart()
+                this.controller.addToCart()
               })
           }
           .width('100%')
@@ -245,7 +204,7 @@ export struct ProductDetailPage {
       }
       .layoutWeight(1)
 
-      // 底部按钮：确认加购并返回（携带数量 popParam）
+      // ── 底部按钮：确认加购并返回（携带数量 popParam）────────────────
       Row({ space: 12 }) {
         Button('返回')
           .layoutWeight(1)
@@ -256,14 +215,14 @@ export struct ProductDetailPage {
             HMRouterMgr.pop()
           })
 
-        Button(`加入购物车${this.addCount > 0 ? `（${this.addCount}）` : ''}`)
+        Button(`加入购物车${this.vm.addCount > 0 ? `（${this.vm.addCount}）` : ''}`)
           .layoutWeight(2)
           .height(48)
-          .enabled(this.addCount > 0)
-          .backgroundColor(this.addCount > 0 ? this.theme.primary : this.theme.disabledBg)
+          .enabled(this.vm.addCount > 0)
+          .backgroundColor(this.vm.addCount > 0 ? this.theme.primary : this.theme.disabledBg)
           .fontColor(this.theme.onPrimary)
           .onClick(() => {
-            this.confirmAndBack()
+            this.controller.confirmAndBack()
           })
       }
       .width('100%')
