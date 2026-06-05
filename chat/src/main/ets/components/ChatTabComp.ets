@@ -2,11 +2,10 @@ import { KeyboardAvoidMode } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { ChatController } from '../controller/ChatController'
 import { ChatSessionController } from '../controller/ChatSessionController'
-import { KeyboardController } from '../controller/KeyboardController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
-import { WindowUtil, ThemeState, getThemeState } from 'common'
+import { WindowUtil, ThemeState, getThemeState, KeyboardController } from 'common'
 import { ChatLoadState, getChatLoadState } from '../viewmodel/ChatLoadState'
 
 /**
