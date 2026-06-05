@@ -1,29 +1,37 @@
-import { EntryRoutes } from '../constants/EntryRoutes'
-import { HMRouterMgr } from '@hadss/hmrouter'
-import { NAV_ID } from 'common'
 import { tabState } from '../viewmodel/AppTabState'
-import { clearAuth, AuthPersist } from '../utils/AuthPersist'
+import { AuthPersist } from '../utils/AuthPersist'
 import { ThemeState } from '../viewmodel/ThemeState'
+import { ProfileController } from '../controller/ProfileController'
 
+/** 菜单项数据结构：显示文字 + 点击动作 */
 interface MenuItem {
   label: string
   action: () => void
 }
 
+/**
+ * 我的 Tab 组件。
+ *
+ * 职责：纯 UI 渲染（头像、用户名、菜单列表、主题切换、退出登录按钮）。
+ * 登出逻辑和导航跳转委托给 ProfileController。
+ */
 @ComponentV2
 export struct ProfileTabComp {
+  /** 来自父组件（HomePage）的登录凭证，用于展示头像首字母和用户名 */
   @Consumer() auth: AuthPersist = new AuthPersist()
+  /** 来自父组件（HomePage）的全局主题，用于动态颜色和切换 */
   @Consumer() theme: ThemeState = new ThemeState()
 
+  private controller: ProfileController = new ProfileController()
+
+  /**
+   * 菜单项列表（数据 + 动作绑定）。
+   * 动作指向 controller 方法，组件本身不含业务逻辑。
+   */
   private menuItems: MenuItem[] = [
     {
       label: '消息记录',
-      action: () => {
-        HMRouterMgr.push({
-          navigationId: NAV_ID,
-          pageUrl: EntryRoutes.PAGE_CHAT_HISTORY
-        })
-      }
+      action: () => this.controller.goHistory()
     },
     {
       label: '帮助与反馈',
@@ -35,17 +43,9 @@ export struct ProfileTabComp {
     }
   ]
 
-  private logout(): void {
-    // 1. 重置 Tab 下标
-    tabState.currentIndex = 0
+  // ─── @Builder ─────────────────────────────────────────────────────────────
 
-    // 2. 清除持久化 token
-    clearAuth()
-
-    // 3. 当前逻辑是留在首页，通过 auth 状态切换成“去登录”
-    // HMRouterMgr.replace({ navigationId: NAV_ID, pageUrl: EntryRoutes.PAGE_LOGIN })
-  }
-
+  /** 主题切换按钮（亮色/暗黑互切） */
   @Builder
   themeSwitchButton() {
     Button(this.theme.isDark ? '白天模式' : '夜间模式')
@@ -55,15 +55,18 @@ export struct ProfileTabComp {
       .fontColor(this.theme.secondaryButtonText)
       .margin({ top: 20, bottom: 12 })
       .onClick(() => {
+        // isDark 是 @Trace 字段，修改后全局所有组件自动重渲染
         this.theme.isDark = !this.theme.isDark
       })
   }
 
+  // ─── UI ───────────────────────────────────────────────────────────────────
+
   build() {
     Column() {
-      // 用户信息区
+      // ── 用户信息区（头像 + 用户名 + debug 信息）──────────────────────
       Column({ space: 10 }) {
-        // 头像
+        // 头像：取用户名首字母大写，未登录显示 U
         Text(this.auth.userName ? this.auth.userName.charAt(0).toUpperCase() : 'U')
           .width(72)
           .height(72)
@@ -75,13 +78,12 @@ export struct ProfileTabComp {
           .borderRadius(36)
           .margin({ top: 40 })
 
-        // 用户名
         Text(this.auth.userName || '用户')
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.theme.textPrimary)
 
-        // 演示 AppStorageV2：当前 Tab 下标
+        // 演示 AppStorageV2：实时显示当前 Tab 下标
         Text(`AppStorageV2 · currentIndex = ${tabState.currentIndex}`)
           .fontSize(11)
           .fontColor(this.theme.textTertiary)
@@ -93,7 +95,7 @@ export struct ProfileTabComp {
       .border({ width: { bottom: 0.5 }, color: this.theme.border })
       .backgroundColor(this.theme.surface)
 
-      // 通用菜单
+      // ── 通用菜单列表 ────────────────────────────────────────────────
       Column() {
         ForEach(this.menuItems, (item: MenuItem) => {
           Row() {
@@ -123,8 +125,9 @@ export struct ProfileTabComp {
 
       this.themeSwitchButton()
 
-      // 退出登录 / 去登录
+      // ── 退出登录 / 去登录 ────────────────────────────────────────────
       if (this.auth.token.length > 0) {
+        // 已登录：显示退出登录按钮
         Button('退出登录')
           .width('90%')
           .height(48)
@@ -133,9 +136,10 @@ export struct ProfileTabComp {
           .border({ width: 1, color: this.theme.dangerBorder })
           .margin({ bottom: 40 })
           .onClick(() => {
-            this.logout()
+            this.controller.logout()
           })
       } else {
+        // 未登录：显示去登录按钮
         Button('去登录')
           .width('90%')
           .height(48)
@@ -143,10 +147,7 @@ export struct ProfileTabComp {
           .fontColor(this.theme.onPrimary)
           .margin({ bottom: 40 })
           .onClick(() => {
-            HMRouterMgr.push({
-              navigationId: NAV_ID,
-              pageUrl: EntryRoutes.PAGE_LOGIN
-            })
+            this.controller.goLogin()
           })
       }
     }

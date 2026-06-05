@@ -6,14 +6,25 @@ import { hasToken } from '../utils/AuthPersist'
 import { HMUtil } from 'common'
 import { ThemeState, getThemeState } from '../viewmodel/ThemeState'
 
+/**
+ * 登录页面。
+ *
+ * 职责：纯 UI 渲染（账户/密码输入框、登录按钮）。
+ * 登录业务逻辑委托给 AuthController（表单校验 → AuthBiz → AuthImp → HttpUtil）。
+ *
+ * 若已持有 token（如从其他页面跳转过来），直接 pop 返回，不展示登录页。
+ */
 @HMRouter({ pageUrl: EntryRoutes.PAGE_LOGIN })
 @ComponentV2
 export struct Login {
+  /** 登录表单视图状态（userName / password / isLoading / isLogin）*/
   @Local vm: AuthViewModel = new AuthViewModel()
   @Local controller: AuthController = new AuthController(this.vm)
+  /** 全局主题（亮色/暗黑），用于动态颜色 */
   @Local theme: ThemeState = getThemeState()
 
   aboutToAppear(): void {
+    // 已有 token 表示已登录，无需再次登录，直接返回
     if (hasToken()) {
       HMUtil.pop()
     }
