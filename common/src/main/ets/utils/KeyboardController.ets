@@ -2,16 +2,14 @@ import { window, display } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 
 /**
- * 键盘监听控制器。
+ * 键盘监听控制器（通用工具）。
  *
- * 将 ChatTabComp 与 ChatPage 中重复的软键盘监听逻辑集中到此处，避免代码重复。
- *
- * 设计原则：
- * - 控制器负责注册/注销监听、将 heightPx 转换为 heightVp
- * - 动画（animateTo）由调用方（组件）提供，保持 UI 层解耦
+ * 软键盘弹起/收起时，业务页面通常需要动态调整底部 padding 防止输入框被遮挡。
+ * 本类封装了 Window.on('keyboardHeightChange') 的注册/注销与单位换算（px → vp），
+ * 由调用方提供回调决定如何响应（一般用 animateTo 触发布局动画）。
  *
  * 使用示例：
- * ```
+ * ```ts
  * private keyboardController: KeyboardController = new KeyboardController()
  *
  * aboutToAppear(): void {
@@ -30,14 +28,11 @@ import { common } from '@kit.AbilityKit'
  * ```
  */
 export class KeyboardController {
-  /** 持有 Window 引用以便 dispose 时注销事件 */
+  /** 持有 Window 引用以便 dispose 时注销事件，避免内存泄漏 */
   private mainWindow: window.Window | null = null
 
   /**
    * 初始化软键盘高度变化监听。
-   *
-   * 将原始 heightPx 转换为 heightVp 后回调 onHeightChange，
-   * 由调用方决定如何响应（通常执行 animateTo 动画更新布局）。
    *
    * @param ctx UIAbility 上下文（获取 Window 实例需要）
    * @param onHeightChange 高度变化回调
