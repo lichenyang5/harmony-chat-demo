@@ -7,4 +7,6 @@
 export class HomeViewModel {
   /** 购物车累计数量，由 ProductDetailPage pop 时的 onResult 回调累加 */
   @Trace cartCount: number = 0
+  //搜索
+  @Trace searchKeyword: string = ''
 }

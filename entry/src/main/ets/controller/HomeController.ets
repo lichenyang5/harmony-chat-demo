@@ -1,7 +1,7 @@
 import { HMRouterMgr, HMPopInfo } from '@hadss/hmrouter'
 import { NAV_ID } from 'common'
 import { EntryRoutes } from '../constants/EntryRoutes'
-import { Product } from '../models/productModel'
+import { MOCK_PRODUCTS, Product } from '../models/productModel'
 import { HomeViewModel } from '../viewmodel/HomeViewModel'
 
 /**
@@ -43,4 +43,13 @@ export class HomeController {
       }
     )
   }
+  //   搜索筛选
+  getFilteredProducts(): Product[] {
+    const kw = this.vm.searchKeyword.trim()
+    if (!kw) return MOCK_PRODUCTS
+    return MOCK_PRODUCTS.filter(p =>
+    p.name.includes(kw) || p.desc.includes(kw)
+    )
+  }
 }
+
