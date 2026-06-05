@@ -7,21 +7,25 @@ import { HomeViewModel } from '../viewmodel/HomeViewModel'
 import { HomeController } from '../controller/HomeController'
 import { ProductCardComp } from './ProductCardComp'
 import { EntryRoutes } from '../constants/EntryRoutes'
+import { CartState, getCartState } from '../viewmodel/CartState'
 
 /**
  * 首页 Tab 组件。
  *
  * 职责：纯 UI 渲染（顶部问候 + 搜索框 + 商品网格 + 购物车入口）。
- * 所有业务逻辑（路由跳转、搜索过滤、加购计数）委托给 HomeController。
+ * 所有业务逻辑（路由跳转、搜索过滤）委托给 HomeController。
  *
- * 响应式说明：V2 下 build 内调用 `this.controller.getFilteredProducts()`，
- * 该方法内部访问了 vm.searchKeyword，会自动建立依赖；关键词变化时
- * build 重跑、Grid 自动过滤。无需 @Monitor 显式监听。
+ * 响应式说明：
+ * - 商品网格：build 调 `controller.getFilteredProducts()`，内部访问 vm.searchKeyword
+ *   自动建立依赖；关键词变化时 build 重跑、Grid 自动过滤。
+ * - 购物车角标：读全局单例 cart.totalCount，详情页加购或购物车页删改后自动同步。
  */
 @ComponentV2
 export struct HomeTabComp {
-  /** 首页视图状态（搜索关键词、购物车计数） */
+  /** 首页视图状态（搜索关键词） */
   @Local vm: HomeViewModel = new HomeViewModel()
+  /** 全局购物车单例（持久化），用于角标显示 */
+  @Local cart: CartState = getCartState()
 
   /** 来自父组件（HomePage）的登录凭证，用于展示用户名 */
   @Consumer() auth: AuthPersist = new AuthPersist()
@@ -48,14 +52,13 @@ export struct HomeTabComp {
 
         Blank()
 
-        // 购物车图标 + 数量角标（数字角标 Step 3 接全局 CartState 后才有意义，
-        // 当前 vm.cartCount 由旧的 ProductDetailPage onResult 回调累加）
+        // 购物车图标 + 数量角标（数字来自全局 CartState.totalCount）
         Stack({ alignContent: Alignment.TopEnd }) {
           Text('🛒')
             .fontSize(24)
 
-          if (this.vm.cartCount > 0) {
-            Text(`${this.vm.cartCount}`)
+          if (this.cart.totalCount > 0) {
+            Text(`${this.cart.totalCount}`)
               .fontSize(10)
               .fontColor(this.theme.onDanger)
               .width(16)

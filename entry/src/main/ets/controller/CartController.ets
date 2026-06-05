@@ -1,68 +1,36 @@
 import { promptAction } from '@kit.ArkUI'
-import { MOCK_PRODUCTS } from '../models/productModel'
-import { CartItem, CartViewModel } from '../viewmodel/CartViewModel'
+import { Product } from '../models/productModel'
+import { CartState, getCartState } from '../viewmodel/CartState'
 
 /**
  * 购物车控制器。
  *
- * 职责：
- * - 启动时塞 3 条假数据（Step 3 接持久化后这段会替换为"从持久化读取"）
- * - 增 / 删 / 改购物车条目
- * - 触发"去支付"
+ * 职责：把购物车页面的用户交互转发给全局 CartState（持久化单例）。
+ * 不再持有页面级 ViewModel —— 全局 CartState 即数据源，
+ * 关 App 重启后数据自动从 PersistenceV2 恢复，不需要 loadMockData。
  */
 export class CartController {
-  private vm: CartViewModel
+  private cart: CartState = getCartState()
 
-  constructor(vm: CartViewModel) {
-    this.vm = vm
-    this.loadMockData()
+  /** + 按钮：加一件相同商品（直接 push） */
+  increase(product: Product): void {
+    this.cart.add(product)
   }
 
-  /**
-   * 临时假数据：从 MOCK_PRODUCTS 取前 3 个商品做成 CartItem 推入 vm.items。
-   * Step 3 接入 PersistenceV2 后，这个方法会被替换为"从持久化读取"。
-   */
-  private loadMockData(): void {
-    const picked = MOCK_PRODUCTS.slice(0, 3)
-    picked.forEach((p) => {
-      const item = new CartItem()
-      item.productId = p.id
-      item.productName = p.name
-      item.price = p.price
-      item.image = p.image
-      item.count = 1
-      this.vm.items.push(item)
-    })
-  }
-
-  /**
-   * 移除指定商品。用 filter 返回新数组而不是 splice ——
-   * V2 下数组重新赋值能可靠触发 ForEach 重新计算 keyGenerator。
-   */
-  remove(productId: string): void {
-    this.vm.items = this.vm.items.filter((i) => i.productId !== productId)
-  }
-
-  /** 数量 +1。CartItem 是 @ObservedV2 + @Trace，count 修改自动响应 UI 与 totalCount/totalAmount。 */
-  increase(productId: string): void {
-    const item = this.vm.items.find((i) => i.productId === productId)
-    if (item) {
-      item.count++
-    }
-  }
-
-  /** 数量 -1，最小为 1（再小就该用 remove 而不是 decrease）。 */
+  /** - 按钮：减一件（移除第一个匹配项；减到 0 该商品自动从聚合列表消失） */
   decrease(productId: string): void {
-    const item = this.vm.items.find((i) => i.productId === productId)
-    if (item && item.count > 1) {
-      item.count--
-    }
+    this.cart.removeOne(productId)
   }
 
-  /** 去支付：暂时弹 Toast 占位，等支付/订单页接入后替换。 */
+  /** 左滑删除：移除全部相同 id 的项 */
+  remove(productId: string): void {
+    this.cart.remove(productId)
+  }
+
+  /** 去支付：暂时弹 Toast 占位，等支付/订单页接入后替换 */
   goPay(): void {
     promptAction.showToast({
-      message: `去支付（共 ${this.vm.totalCount} 件，¥${this.vm.totalAmount}）`,
+      message: `去支付（共 ${this.cart.totalCount} 件，¥${this.cart.totalAmount}）`,
       duration: 1500
     })
   }

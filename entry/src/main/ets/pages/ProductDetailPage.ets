@@ -173,10 +173,15 @@ export struct ProductDetailPage {
 
             Blank()
 
+            // Button 默认 type 是 Capsule/ROUNDED_RECTANGLE，自带较大 padding，
+            // 36vp 的小按钮文字也容易被压扁；设 type(Normal) + padding(0) 自己控圆角。
             Button('-')
+              .type(ButtonType.Normal)
+              .borderRadius(18)
+              .padding(0)
               .width(36)
               .height(36)
-              .fontSize(18)
+              .fontSize(20)
               .backgroundColor(this.theme.secondaryButtonBg)
               .fontColor(this.theme.secondaryButtonText)
               .onClick(() => this.controller.decreaseCart())
@@ -189,9 +194,12 @@ export struct ProductDetailPage {
               .textAlign(TextAlign.Center)
 
             Button('+')
+              .type(ButtonType.Normal)
+              .borderRadius(18)
+              .padding(0)
               .width(36)
               .height(36)
-              .fontSize(18)
+              .fontSize(20)
               .backgroundColor(this.theme.primary)
               .fontColor(this.theme.onPrimary)
               .onClick(() => this.controller.addToCart())

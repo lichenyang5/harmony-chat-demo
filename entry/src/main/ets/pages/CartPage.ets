@@ -2,32 +2,34 @@ import { HMRouter, HMRouterMgr } from '@hadss/hmrouter'
 import { getThemeState, ThemeState } from 'common'
 import { EntryRoutes } from '../constants/EntryRoutes'
 import { CartController } from '../controller/CartController'
-import { CartItem, CartViewModel } from '../viewmodel/CartViewModel'
+import { CartState, getCartState, GroupedCartItem } from '../viewmodel/CartState'
 
 /**
  * 购物车页面。
  *
- * 职责：纯 UI 渲染。增删改逻辑全部委托给 CartController；
- * 合计金额/件数由 CartViewModel 的 getter 实时计算（响应式）。
+ * 数据源：全局持久化的 CartState（PersistenceV2 单例）。
+ * 同一商品多次加购在 items 数组里出现多次，UI 用 cart.getGrouped()
+ * 聚合后展示，count 是同 id 出现的次数。
  *
- * 结构：
- * - 顶部 NavBar
- * - 中间区域：if items 为空 → 空状态；否则 → List（支持左滑删除）
- * - 底部支付栏（合计 + 去支付按钮）
+ * 交互：
+ * - + 按钮 → CartController.increase(product) → cart.add(product)
+ * - - 按钮 → CartController.decrease(id) → cart.removeOne(id)（减到 0 自动从聚合列表消失）
+ * - 左滑删除 → CartController.remove(id) → cart.remove(id) 移除全部相同 id
+ * - 去支付 → 暂时 Toast 占位
  */
 @HMRouter({ pageUrl: EntryRoutes.PAGE_CART })
 @ComponentV2
 export struct CartPage {
-  /** 页面视图状态（购物车条目） */
-  @Local vm: CartViewModel = new CartViewModel()
-  /** 全局主题，用于动态颜色 */
+  /** 全局购物车单例（持久化 + 响应式） */
+  @Local cart: CartState = getCartState()
+  /** 全局主题 */
   @Local theme: ThemeState = getThemeState()
 
-  private controller: CartController = new CartController(this.vm)
+  private controller: CartController = new CartController()
 
   /**
    * 左滑出现的删除按钮 @Builder。
-   * ListItem 的 swipeAction.end 需要一个 Builder，参数 productId 由外层 ForEach 闭包传入。
+   * 点击调用 controller.remove 删除该 productId 全部条目。
    */
   @Builder
   deleteBuilder(productId: string) {
@@ -64,8 +66,8 @@ export struct CartPage {
       .backgroundColor(this.theme.surface)
       .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
-      // ── 中间区域：空状态 / 列表 二选一 ───────────────────────────────
-      if (this.vm.items.length === 0) {
+      // ── 中间区域：空 / 列表 二选一 ───────────────────────────────────
+      if (this.cart.items.length === 0) {
         // 空状态
         Column({ space: 12 }) {
           Text('🛒').fontSize(80)
@@ -81,13 +83,13 @@ export struct CartPage {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
       } else {
-        // 商品列表
+        // 聚合后的商品列表（同 id 合并）
         List({ space: 12 }) {
-          ForEach(this.vm.items, (item: CartItem) => {
+          ForEach(this.cart.getGrouped(), (item: GroupedCartItem) => {
             ListItem() {
               Row({ space: 12 }) {
                 // 缩略图
-                Image($rawfile(item.image))
+                Image($rawfile(item.product.image))
                   .width(80)
                   .height(80)
                   .borderRadius(8)
@@ -95,13 +97,13 @@ export struct CartPage {
 
                 // 中间：名称 + 单价
                 Column({ space: 6 }) {
-                  Text(item.productName)
+                  Text(item.product.name)
                     .fontSize(14)
                     .fontColor(this.theme.textPrimary)
                     .maxLines(2)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-                  Text(`¥${item.price}`)
+                  Text(`¥${item.product.price}`)
                     .fontSize(15)
                     .fontWeight(FontWeight.Bold)
                     .fontColor(this.theme.danger)
@@ -110,14 +112,21 @@ export struct CartPage {
                 .alignItems(HorizontalAlign.Start)
 
                 // 右侧：数量加减
+                //
+                // Button 默认 type 是 Capsule/ROUNDED_RECTANGLE，自带较大 padding，
+                // 28vp 这种小按钮文字会被裁掉；必须设 type(Normal) + padding(0)
+                // 自己控圆角，才能让"-"/"+"正常居中显示。
                 Row({ space: 8 }) {
                   Button('-')
+                    .type(ButtonType.Normal)
+                    .borderRadius(14)
+                    .padding(0)
                     .width(28)
                     .height(28)
-                    .fontSize(14)
+                    .fontSize(16)
                     .backgroundColor(this.theme.secondaryButtonBg)
                     .fontColor(this.theme.secondaryButtonText)
-                    .onClick(() => this.controller.decrease(item.productId))
+                    .onClick(() => this.controller.decrease(item.product.id))
 
                   Text(`${item.count}`)
                     .fontSize(14)
@@ -126,12 +135,15 @@ export struct CartPage {
                     .fontColor(this.theme.textPrimary)
 
                   Button('+')
+                    .type(ButtonType.Normal)
+                    .borderRadius(14)
+                    .padding(0)
                     .width(28)
                     .height(28)
-                    .fontSize(14)
+                    .fontSize(16)
                     .backgroundColor(this.theme.primary)
                     .fontColor(this.theme.onPrimary)
-                    .onClick(() => this.controller.increase(item.productId))
+                    .onClick(() => this.controller.increase(item.product))
                 }
               }
               .width('100%')
@@ -139,8 +151,8 @@ export struct CartPage {
               .backgroundColor(this.theme.surface)
               .borderRadius(12)
             }
-            .swipeAction({ end: this.deleteBuilder(item.productId) })
-          }, (item: CartItem) => item.productId)
+            .swipeAction({ end: this.deleteBuilder(item.product.id) })
+          }, (item: GroupedCartItem) => item.product.id)
         }
         .layoutWeight(1)
         .padding({ left: 16, right: 16, top: 12 })
@@ -149,12 +161,12 @@ export struct CartPage {
       // ── 底部支付栏 ──────────────────────────────────────────────────
       Row() {
         Column({ space: 2 }) {
-          Text(`合计 ¥${this.vm.totalAmount}`)
+          Text(`合计 ¥${this.cart.totalAmount}`)
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.theme.danger)
 
-          Text(`共 ${this.vm.totalCount} 件`)
+          Text(`共 ${this.cart.totalCount} 件`)
             .fontSize(11)
             .fontColor(this.theme.textSecondary)
         }
@@ -166,7 +178,7 @@ export struct CartPage {
           .height(40)
           .backgroundColor(this.theme.primary)
           .fontColor(this.theme.onPrimary)
-          .enabled(this.vm.items.length > 0)
+          .enabled(this.cart.items.length > 0)
           .onClick(() => this.controller.goPay())
       }
       .width('100%')
