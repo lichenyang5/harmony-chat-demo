@@ -1,6 +1,7 @@
 import { ChatMessage } from '../models/chatModel'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ThemeState, getThemeState } from 'common'
+import { PickupConfirmCardComp } from './PickupConfirmCardComp'
 
 /**
  * 单条气泡子组件
@@ -37,18 +38,19 @@ struct MessageBubble {
   build() {
     Row() {
       if (this.msg.role === 'assistant') {
-        Text(this.getAssistantText())
-          .fontSize(15)
-          .fontColor(this.theme.textPrimary)
-          .padding(12)
-          .backgroundColor(this.theme.assistantBubbleBg)
-          .borderRadius({
-            topLeft: 4,
-            topRight: 12,
-            bottomLeft: 12,
-            bottomRight: 12
-          })
-          .constraintSize({ maxWidth: '75%' })
+        Column({ space: 8 }) {
+          // AI 文本直接打印在列表背景上：无气泡背景、无圆角、无 padding
+          Text(this.getAssistantText())
+            .fontSize(15)
+            .fontColor(this.theme.textPrimary)
+            .constraintSize({ maxWidth: '85%' })
+
+          // 后端 done 帧附带 card → 在文本气泡下方追加卡片占位
+          if (this.msg.card !== null) {
+            PickupConfirmCardComp({ card: this.msg.card! })
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
 
         Blank()
       } else {
