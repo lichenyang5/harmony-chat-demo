@@ -13,16 +13,17 @@ import { CartState, getCartState } from '../viewmodel/CartState'
  * 首页 Tab 组件。
  *
  * 职责：纯 UI 渲染（顶部问候 + 搜索框 + 商品网格 + 购物车入口）。
- * 所有业务逻辑（路由跳转、搜索过滤）委托给 HomeController。
+ * 所有业务逻辑（路由跳转、拉取商品、搜索过滤）委托给 HomeController。
  *
  * 响应式说明：
- * - 商品网格：build 调 `controller.getFilteredProducts()`，内部访问 vm.searchKeyword
- *   自动建立依赖；关键词变化时 build 重跑、Grid 自动过滤。
- * - 购物车角标：读全局单例 cart.totalCount，详情页加购或购物车页删改后自动同步。
+ * - aboutToAppear 时 controller.loadProducts() 拉 /api/products → vm.products
+ * - 商品网格：build 调 controller.getFilteredProducts()，访问 vm.products
+ *   / vm.searchKeyword 自动建立依赖
+ * - 购物车角标：读全局单例 cart.totalCount，加购后自动同步
  */
 @ComponentV2
 export struct HomeTabComp {
-  /** 首页视图状态（搜索关键词） */
+  /** 首页视图状态（搜索关键词、商品列表、loading、error）*/
   @Local vm: HomeViewModel = new HomeViewModel()
   /** 全局购物车单例（持久化），用于角标显示 */
   @Local cart: CartState = getCartState()
@@ -33,6 +34,11 @@ export struct HomeTabComp {
   @Consumer() theme: ThemeState = new ThemeState()
 
   private controller: HomeController = new HomeController(this.vm)
+
+  aboutToAppear(): void {
+    // 进首页时拉接口；切到其他 Tab 再回来不会重复触发（TabContent 保留实例）
+    this.controller.loadProducts()
+  }
 
   build() {
     Column() {
@@ -52,7 +58,7 @@ export struct HomeTabComp {
 
         Blank()
 
-        // 购物车图标 + 数量角标（数字来自全局 CartState.totalCount）
+        // 购物车图标 + 数量角标
         Stack({ alignContent: Alignment.TopEnd }) {
           Text('🛒')
             .fontSize(24)
@@ -92,28 +98,57 @@ export struct HomeTabComp {
           this.vm.searchKeyword = v
         })
 
-      // ── 商品网格（两列）─────────────────────────────────────────────
-      Grid() {
-        ForEach(
-          this.controller.getFilteredProducts(),
-          (product: Product) => {
-            GridItem() {
-              ProductCardComp({
-                product: product,
-                onTap: (p: Product) => { this.controller.goDetail(p) }
-              })
-            }
-          },
-          (p: Product) => p.id
-        )
+      // ── 主区域：loading / error / 商品网格 三选一 ──────────────────────
+      if (this.vm.loading && this.vm.products.length === 0) {
+        Column({ space: 12 }) {
+          LoadingProgress()
+            .width(40)
+            .height(40)
+            .color(this.theme.primary)
+          Text('正在加载商品…')
+            .fontSize(12)
+            .fontColor(this.theme.textSecondary)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.vm.error.length > 0 && this.vm.products.length === 0) {
+        Column({ space: 12 }) {
+          Text('😢').fontSize(48)
+          Text(this.vm.error)
+            .fontSize(13)
+            .fontColor(this.theme.textSecondary)
+          Button('重新加载')
+            .backgroundColor(this.theme.primary)
+            .fontColor(this.theme.onPrimary)
+            .onClick(() => this.controller.loadProducts())
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+      } else {
+        Grid() {
+          ForEach(
+            this.controller.getFilteredProducts(),
+            (product: Product) => {
+              GridItem() {
+                ProductCardComp({
+                  product: product,
+                  onTap: (p: Product) => { this.controller.goDetail(p) }
+                })
+              }
+            },
+            (p: Product) => p.id
+          )
+        }
+        .columnsTemplate('1fr 1fr')
+        .columnsGap(12)
+        .rowsGap(12)
+        .padding({ left: 16, right: 16, bottom: 16 })
+        .width('100%')
+        .layoutWeight(1)
+        .backgroundColor(this.theme.bg)
       }
-      .columnsTemplate('1fr 1fr')
-      .columnsGap(12)
-      .rowsGap(12)
-      .padding({ left: 16, right: 16, bottom: 16 })
-      .width('100%')
-      .layoutWeight(1)
-      .backgroundColor(this.theme.bg)
     }
     .width('100%')
     .height('100%')

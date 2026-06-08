@@ -18,5 +18,11 @@ export class EntryRoutes {
   static readonly PAGE_PRODUCT_DETAIL: string = 'pages/ProductDetail'
   /** 购物车页面 */
   static readonly PAGE_CART: string = 'pages/Cart'
+  /** 结算 / 支付页（受 AuthInterceptor 保护） */
+  static readonly PAGE_CHECKOUT: string = 'pages/Checkout'
+  /** 我的订单页（受 AuthInterceptor 保护） */
+  static readonly PAGE_ORDER_LIST: string = 'pages/OrderList'
+  /** 我的收藏页 */
+  static readonly PAGE_FAVORITE_LIST: string = 'pages/FavoriteList'
   static readonly DIALOG_LOGIN_PROMPT: string = 'dialogs/LoginPrompt'
 }

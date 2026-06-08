@@ -3,6 +3,7 @@ import { EntryRoutes } from '../constants/EntryRoutes'
 import { getThemeState, ThemeState } from '../viewmodel/ThemeState'
 import { ProductDetailViewModel } from '../viewmodel/ProductDetailViewModel'
 import { ProductDetailController } from '../controller/ProductDetailController'
+import { FavoriteState, getFavoriteState } from '../viewmodel/FavoriteState'
 
 /**
  * 商品详情页。
@@ -29,6 +30,8 @@ export struct ProductDetailPage {
   @Local vm: ProductDetailViewModel = new ProductDetailViewModel()
   /** 全局主题（亮色/暗黑），用于动态颜色 */
   @Local theme: ThemeState = getThemeState()
+  /** 全局收藏单例（持久化），驱动顶部心形按钮 */
+  @Local favorite: FavoriteState = getFavoriteState()
 
   private controller: ProductDetailController = new ProductDetailController(this.vm)
 
@@ -64,6 +67,13 @@ export struct ProductDetailPage {
           .fontColor(this.theme.textPrimary)
 
         Blank()
+
+        // 顶部右侧心形按钮：toggle 收藏，UI 响应式刷新
+        Text(this.favorite.has(this.vm.product.id) ? '♥' : '♡')
+          .fontSize(22)
+          .fontColor(this.favorite.has(this.vm.product.id) ? this.theme.danger : this.theme.textSecondary)
+          .padding(12)
+          .onClick(() => this.favorite.toggle(this.vm.product.id))
       }
       .width('100%')
       .height(56)
