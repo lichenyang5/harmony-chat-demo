@@ -45,4 +45,20 @@ export class ProfileController {
       pageUrl: EntryRoutes.PAGE_CHAT_HISTORY
     })
   }
+
+  /** 跳转到我的订单页（受 AuthInterceptor 保护） */
+  goOrderList(): void {
+    HMRouterMgr.push({
+      navigationId: NAV_ID,
+      pageUrl: EntryRoutes.PAGE_ORDER_LIST
+    })
+  }
+
+  /** 跳转到我的收藏页（不需要登录） */
+  goFavoriteList(): void {
+    HMRouterMgr.push({
+      navigationId: NAV_ID,
+      pageUrl: EntryRoutes.PAGE_FAVORITE_LIST
+    })
+  }
 }

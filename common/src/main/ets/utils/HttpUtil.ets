@@ -20,4 +20,21 @@ export class HttpUtil {
       req.destroy()
     })
   }
+
+  static get<T>(path: string): Promise<ApiResponse<T>> {
+    const req = http.createHttp()
+    return req.request(
+      ApiConstants.BASE_URL + path,
+      {
+        method: http.RequestMethod.GET,
+        header: { 'Content-Type': 'application/json' },
+        connectTimeout: 10000,
+        readTimeout: 10000
+      }
+    ).then(res => {
+      return JSON.parse(res.result as string) as ApiResponse<T>
+    }).finally(() => {
+      req.destroy()
+    })
+  }
 }

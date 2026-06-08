@@ -1,4 +1,6 @@
-import { promptAction } from '@kit.ArkUI'
+import { HMRouterMgr } from '@hadss/hmrouter'
+import { NAV_ID } from 'common'
+import { EntryRoutes } from '../constants/EntryRoutes'
 import { Product } from '../models/productModel'
 import { CartState, getCartState } from '../viewmodel/CartState'
 
@@ -27,11 +29,14 @@ export class CartController {
     this.cart.remove(productId)
   }
 
-  /** 去支付：暂时弹 Toast 占位，等支付/订单页接入后替换 */
+  /**
+   * 去支付：跳结算页（CheckoutPage 受 AuthInterceptor 保护）。
+   * 未登录会被拦截并弹登录提示。
+   */
   goPay(): void {
-    promptAction.showToast({
-      message: `去支付（共 ${this.cart.totalCount} 件，¥${this.cart.totalAmount}）`,
-      duration: 1500
+    HMRouterMgr.push({
+      navigationId: NAV_ID,
+      pageUrl: EntryRoutes.PAGE_CHECKOUT
     })
   }
 }

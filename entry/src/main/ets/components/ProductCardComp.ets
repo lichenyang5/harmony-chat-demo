@@ -1,10 +1,11 @@
 import { ThemeState } from 'common'
 import { Product } from '../models/productModel'
+import { FavoriteState, getFavoriteState } from '../viewmodel/FavoriteState'
 
 /**
  * 商品卡片组件。
  *
- * 职责：纯展示。商品图 + 名称 + 描述 + 价格（含原价划线）+ 评分 + 销量 + 角标。
+ * 职责：纯展示。商品图 + 名称 + 描述 + 价格（含原价划线）+ 评分 + 销量 + 角标 + 收藏。
  * 点击事件通过 @Event onTap 上报给父组件（首页/搜索结果页），子组件
  * 不直接耦合路由或 Controller。
  *
@@ -12,6 +13,10 @@ import { Product } from '../models/productModel'
  * - @Param product：父传入的商品（单向只读）
  * - @Event onTap：点击回调，避免父组件把整个 Controller 塞进来
  * - @Consumer theme：从祖先 HomePage 拿全局主题，不需要逐层透传
+ *
+ * 收藏：直接拿全局 FavoriteState 单例（PersistenceV2 持久化），
+ * 点击心形按钮 toggle，UI 响应式刷新。心形按钮自带 onClick，
+ * ArkUI 默认不冒泡，外层 Stack 的 onClick 不会被触发。
  */
 @ComponentV2
 export struct ProductCardComp {
@@ -22,8 +27,13 @@ export struct ProductCardComp {
 
   /** 全局主题（从祖先 HomePage 透传） */
   @Consumer() theme: ThemeState = new ThemeState()
+  /** 全局收藏单例（持久化） */
+  @Local favorite: FavoriteState = getFavoriteState()
 
   build() {
+    // Stack alignContent 设 TopEnd：tag 自然落在右上角；
+    // 心形按钮用 .position() 绝对定位到左上角，避免 .align() 在
+    // 部分 ArkUI 版本里对 Stack 子节点不生效导致全部子元素跑到中间。
     Stack({ alignContent: Alignment.TopEnd }) {
       Column({ space: 6 }) {
         // 商品图（rawfile 加载本地图，product.image 形如 'images/1.png'）
@@ -87,7 +97,20 @@ export struct ProductCardComp {
         offsetY: 2
       })
 
-      // 右上角 tag 角标（"新品"/"热门"/"推荐"等）
+      // 左上角心形收藏按钮：position 绝对定位（相对父 Stack 左上角偏移）。
+      // 半透明黑底圈保证白底图片上心形也清晰可见。
+      Text(this.favorite.has(this.product.id) ? '♥' : '♡')
+        .fontSize(16)
+        .fontColor(this.favorite.has(this.product.id) ? this.theme.danger : Color.White)
+        .textAlign(TextAlign.Center)
+        .width(26)
+        .height(26)
+        .borderRadius(13)
+        .backgroundColor('#66000000')
+        .position({ x: 8, y: 8 })
+        .onClick(() => this.favorite.toggle(this.product.id))
+
+      // 右上角 tag 角标（"新品"/"热门"/"推荐"等），跟随 Stack 默认 TopEnd 对齐
       if (this.product.tag) {
         Text(this.product.tag)
           .fontSize(10)
