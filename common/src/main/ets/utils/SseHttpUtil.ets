@@ -4,11 +4,16 @@ import { ApiConstants } from '../constants/ApiConstants'
 
 /**
  * SSE 流结束帧的元信息
+ *
+ * card 是后端在结束帧里可选附带的结构化卡片数据。
+ * common 层不感知具体业务结构，统一以 Object 透传，
+ * 由业务侧（如 ChatController）映射成具体类型。
  */
 export interface SseDoneMeta {
   sessionId?: string
   messageId?: string
   error?: string
+  card?: Object
 }
 
 /**
@@ -89,7 +94,8 @@ export class SseHttpUtil {
             callbacks.onDone({
               sessionId: frame.sessionId,
               messageId: frame.messageId,
-              error: frame.error
+              error: frame.error,
+              card: frame.card
             })
           } else if (frame.chunk !== undefined) {
             callbacks.onChunk(frame.chunk)

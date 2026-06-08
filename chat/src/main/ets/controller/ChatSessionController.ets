@@ -124,6 +124,8 @@ export class ChatSessionController {
       plain.content = source.content ? source.content : ''
       plain.createTime = source.createTime ? source.createTime : Date.now()
       plain.sessionId = source.sessionId ? source.sessionId : this.vm.sessionId
+      // 卡片：PickupCard 是普通类，可直接序列化
+      plain.card = source.card ? source.card : null
       return plain
     })
   }
@@ -143,6 +145,9 @@ export class ChatSessionController {
       msg.content = plain.content ? plain.content : ''
       msg.createTime = plain.createTime ? plain.createTime : Date.now()
       msg.sessionId = plain.sessionId ? plain.sessionId : sessionId
+      // 卡片：JSON.parse 出来的 plain.card 是普通对象，字段与 PickupCard 一致，
+      // 直接赋值即可（PickupCard 上无方法，无需重建实例）
+      msg.card = plain.card ? plain.card : null
       return msg
     })
   }
