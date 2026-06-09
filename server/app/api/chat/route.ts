@@ -31,6 +31,41 @@ interface PickupCard {
   moreText: string
 }
 
+// 确认行程场景：上方引导文案（走 SSE chunk 流式推送）
+const TRIP_INTRO =
+  '结合你当前的定位，推荐上车点为香港中国企业协会，为你规划前往香港国际机场（进站口）的用车行程。'
+
+// 确认行程场景：下方"确认行程"卡片，结构化字段随 done 帧一次性下发
+interface TripCard {
+  type: 'trip_confirm'
+  title: string
+  startLocation: string      // 香港中国企业协会
+  startTag: string           // 立即出发
+  distance: string           // 全程34.2公里
+  duration: string           // 45分钟
+  endLocation: string        // 香港国际机场
+  arriveTime: string         // 预计13:30到达
+  priceRange: string         // 预估145~155人民币起
+  selectCarText: string      // 选择车型
+  selectedHint: string       // 已选中1种车型:
+  confirmText: string        // 确认用车
+}
+
+const TRIP_CARD: TripCard = {
+  type: 'trip_confirm',
+  title: '确认行程',
+  startLocation: '香港中国企业协会',
+  startTag: '立即出发',
+  distance: '全程34.2公里',
+  duration: '45分钟',
+  endLocation: '香港国际机场',
+  arriveTime: '预计13:30到达',
+  priceRange: '预估145~155人民币起',
+  selectCarText: '选择车型',
+  selectedHint: '已选中1种车型:',
+  confirmText: '确认用车'
+}
+
 const TAXI_CARD: PickupCard = {
   type: 'pickup_confirm',
   title: '确认上车点',
@@ -70,7 +105,12 @@ interface SseFrame {
   done: boolean
   sessionId?: string
   messageId?: string
-  card?: PickupCard
+  card?: PickupCard | TripCard
+}
+
+// 注意：判断顺序必须先 confirm 再 taxi，否则 "确认打车" 会先命中 "打车"。
+function isConfirmTripIntent(input: string): boolean {
+  return input.trim() === '确认打车' || input.includes('确认打车')
 }
 
 function isTaxiIntent(input: string): boolean {
@@ -95,7 +135,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const taxi = isTaxiIntent(inputContent)
+  // 意图判断：confirm 必须优先于 taxi，因为 "确认打车" 也包含 "打车"
+  const confirmTrip = isConfirmTripIntent(inputContent)
+  const taxi = !confirmTrip && isTaxiIntent(inputContent)
 
   // 计算当前是第几轮对话
   // history 里只包含已完成的消息（不含本次 inputContent）
@@ -104,7 +146,9 @@ export async function POST(req: NextRequest) {
   const currentTurn = userCount + 1   // 当前是第几轮（含本次）
 
   let replyContent: string
-  if (taxi) {
+  if (confirmTrip) {
+    replyContent = TRIP_INTRO
+  } else if (taxi) {
     replyContent = TAXI_INTRO
   } else {
     // 多轮时在回复前加上下文标记，让前端能看到 history 真的传过去了
@@ -131,7 +175,9 @@ export async function POST(req: NextRequest) {
           sessionId: finalSessionId,
           messageId
         }
-        if (taxi) {
+        if (confirmTrip) {
+          endFrame.card = TRIP_CARD
+        } else if (taxi) {
           endFrame.card = TAXI_CARD
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(endFrame)}\n\n`))

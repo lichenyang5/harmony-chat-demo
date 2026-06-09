@@ -1,4 +1,14 @@
 /**
+ * 卡片基本字段
+ *
+ * 所有业务卡片在 JSON 上都必须带 type 字段，
+ * 渲染层通过 type 分发到具体卡片组件（pickup_confirm / trip_confirm / ...）。
+ */
+export interface AgentCard {
+  type: string
+}
+
+/**
  * 上车点
  *
  * 后端 done 帧里 card.points[] 的单项结构。
@@ -12,18 +22,36 @@ export class PickupPoint {
 }
 
 /**
- * 确认上车点卡片
- *
- * 后端在 done 帧附带 card 字段时下发的结构化数据。
- * type 字段用于将来扩展更多卡片种类（pickup_confirm / ...）。
+ * 确认上车点卡片（type = 'pickup_confirm'）
  */
 export class PickupCard {
-  type: string = ''
+  type: string = 'pickup_confirm'
   title: string = ''
   question: string = ''
   currentLocation: string = ''
   points: PickupPoint[] = []
   moreText: string = ''
+}
+
+/**
+ * 确认行程卡片（type = 'trip_confirm'）
+ *
+ * 后端识别 "确认打车" 意图后下发，
+ * 字段对应卡片上「起点 / 距离时长 / 终点 / 价格 / 按钮」每一行的文本。
+ */
+export class TripCard {
+  type: string = 'trip_confirm'
+  title: string = ''
+  startLocation: string = ''
+  startTag: string = ''
+  distance: string = ''
+  duration: string = ''
+  endLocation: string = ''
+  arriveTime: string = ''
+  priceRange: string = ''
+  selectCarText: string = ''
+  selectedHint: string = ''
+  confirmText: string = ''
 }
 
 /**
@@ -50,7 +78,8 @@ export class ChatMessage {
   @Trace content: string = ''
   createTime: number = 0
   sessionId: string = ''
-  @Trace card: PickupCard | null = null
+  // 卡片字段统一以 Object 透传，渲染层按 (card as AgentCard).type 分发到具体卡片组件
+  @Trace card: Object | null = null
 }
 
 /**
@@ -70,7 +99,8 @@ export class ChatMessagePlain {
   content: string = ''
   createTime: number = 0
   sessionId: string = ''
-  card: PickupCard | null = null
+  // 与 ChatMessage.card 同步用 Object 透传
+  card: Object | null = null
 }
 
 /**
