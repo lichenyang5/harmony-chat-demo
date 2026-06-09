@@ -1351,7 +1351,7 @@ Header 显示当前用户：鸿蒙练习用户
 
 ## 二十七、可能遇到的问题
 
-### 1. Cannot find module '../utils/AuthStorage'
+### 1. 找不到模块 '../utils/AuthStorage'
 
 原因：
 
@@ -1373,7 +1373,7 @@ entry/src/main/ets/utils/AuthStorage.ets
 export class AuthStorage {}
 ```
 
-### 2. Cannot find module '../stores/AuthStore'
+### 2. 找不到模块 '../stores/AuthStore'
 
 原因：
 
