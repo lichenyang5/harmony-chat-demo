@@ -1,7 +1,8 @@
-import { ChatMessage } from '../models/chatModel'
+import { ChatMessage, AgentCard, PickupCard, TripCard } from '../models/chatModel'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ThemeState, getThemeState } from 'common'
 import { PickupConfirmCardComp } from './PickupConfirmCardComp'
+import { ConfirmTripCardComp } from './ConfirmTripCardComp'
 
 /**
  * 单条气泡子组件
@@ -45,9 +46,16 @@ struct MessageBubble {
             .fontColor(this.theme.textPrimary)
             .constraintSize({ maxWidth: '85%' })
 
-          // 后端 done 帧附带 card → 在文本气泡下方追加卡片占位
+          // 后端 done 帧附带 card → 按 card.type 分发到对应卡片组件。
+          // 注意：所有响应式字段（this.msg.card）必须在 build 顶层直接访问，
+          // 不能抽到 helper 方法里，否则 V2 会丢失依赖追踪。
           if (this.msg.card !== null) {
-            PickupConfirmCardComp({ card: this.msg.card! })
+            if ((this.msg.card as AgentCard).type === 'trip_confirm') {
+              ConfirmTripCardComp({ card: this.msg.card as Object as TripCard })
+            } else {
+              // 默认走 pickup_confirm；后续新增 type 时在此追加 else if 分支
+              PickupConfirmCardComp({ card: this.msg.card as Object as PickupCard })
+            }
           }
         }
         .alignItems(HorizontalAlign.Start)

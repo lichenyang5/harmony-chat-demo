@@ -1,7 +1,7 @@
 import { http } from '@kit.NetworkKit'
 import { SseDoneMeta } from 'common'
 import { ChatBiz } from '../biz/ChatBiz'
-import { ChatMessage, ChatHistoryItem, PickupCard } from '../models/chatModel'
+import { ChatMessage, ChatHistoryItem } from '../models/chatModel'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 
 /**
@@ -106,10 +106,10 @@ export class ChatController {
             this.activeAiMessage.id = meta.messageId
           }
 
-          // 后端 done 帧附带 card → UI 切到卡片渲染分支
-          // raw object 字段结构与 PickupCard 一致，沿用 JSON.parse(...) as Class 惯例
+          // 后端 done 帧附带 card → UI 切到卡片渲染分支。
+          // 这里只透传 raw Object，具体类型由渲染层按 card.type 分发后再 cast。
           if (meta.card && this.activeAiMessage) {
-            this.activeAiMessage.card = meta.card as Object as PickupCard
+            this.activeAiMessage.card = meta.card
           }
 
           this.vm.isLoading = false
