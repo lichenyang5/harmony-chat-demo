@@ -66,7 +66,7 @@ export struct ConfirmTripCardComp {
             .draggable(false)
           Row({ space: 8 }) {
             Column() {
-              Text('预估145~155人民币起')
+              Text(this.card.priceRange)
                 .fontSize(14)
                 .lineHeight(18)
                 .fontColor('#E6000000')
@@ -74,7 +74,7 @@ export struct ConfirmTripCardComp {
                 .width('100%')
                 .textAlign(TextAlign.Start)
 
-              Text('已选中1种车型:')
+              Text(this.card.selectedHint)
                 .fontSize(12)
                 .lineHeight(16)
                 .fontColor('#99000000')
@@ -84,7 +84,7 @@ export struct ConfirmTripCardComp {
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)
 
-            Text('选择车型')
+            Text(this.card.selectCarText)
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor('#FF00B5D9')
@@ -95,7 +95,7 @@ export struct ConfirmTripCardComp {
           .margin({ top: 8, bottom: 24 })
           .width('100%')
 
-          Text('确认用车')
+          Text(this.card.confirmText)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor('#FFFFFF')
@@ -154,7 +154,7 @@ export struct ConfirmTripCardComp {
             .backgroundColor('#FFD91A')
             .borderRadius(4)
 
-          Text('确认行程')
+          Text(this.card.title)
             .fontSize(20)
             .lineHeight(24)
             .fontWeight(FontWeight.Bold)
@@ -166,7 +166,7 @@ export struct ConfirmTripCardComp {
           Row({ space: 4 }) {
             Image($r('app.media.start')).width(12).height(12)
             Row({ space: 4 }) {
-              Text('香港中国企业协会')
+              Text(this.card.startLocation)
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#E6000000')
@@ -175,7 +175,7 @@ export struct ConfirmTripCardComp {
               Image($r('app.media.right')).width(6).height(12)
             }
             .layoutWeight(1)
-            Text('立即出发')
+            Text(this.card.startTag)
               .fontSize(10).lineHeight(12).fontColor('#99000000')
           }
           .width('100%').alignItems(VerticalAlign.Center)
@@ -193,14 +193,14 @@ export struct ConfirmTripCardComp {
             .alignItems(HorizontalAlign.Center)
 
             Image($r('app.media.jiange')).width(12).height(12)
-            Text('全程34.2公里')
+            Text(this.card.distance)
               .fontSize(10).lineHeight(12).fontColor('#99000000')
               .margin({ left: 4 })
 
             Blank()
 
             Image($r('app.media.time')).width(12).height(12)
-            Text('45分钟')
+            Text(this.card.duration)
               .fontSize(10).lineHeight(12).fontColor('#66000000')
               .margin({ left: 4 })
           }
@@ -210,7 +210,7 @@ export struct ConfirmTripCardComp {
           Row({ space: 4 }) {
             Image($r('app.media.end')).width(12).height(12)
             Row({ space: 4 }) {
-              Text('香港国际机场')
+              Text(this.card.endLocation)
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#E6000000')
@@ -219,7 +219,7 @@ export struct ConfirmTripCardComp {
               Image($r('app.media.right')).width(6).height(12)
             }
             .layoutWeight(1)
-            Text('预计13:30到达')
+            Text(this.card.arriveTime)
               .fontSize(10).lineHeight(12).fontColor('#66000000')
           }
           .width('100%').alignItems(VerticalAlign.Center)
