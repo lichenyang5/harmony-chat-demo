@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
 import { ApiConstants } from '../constants/ApiConstants'
+import { LogUtil } from './LogUtil'
 
 /**
  * SSE 流结束帧的元信息
@@ -101,7 +102,7 @@ export class SseHttpUtil {
             callbacks.onChunk(frame.chunk)
           }
         } catch (e) {
-          console.error('[SseHttpUtil] parse frame failed', jsonStr)
+          LogUtil.e('SseHttpUtil', 'parse frame failed: ' + jsonStr)
         }
       }
     })

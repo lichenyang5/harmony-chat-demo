@@ -1,5 +1,5 @@
 import { http } from '@kit.NetworkKit'
-import { SseDoneMeta } from 'common'
+import { LogUtil, SseDoneMeta } from 'common'
 import { ChatBiz } from '../biz/ChatBiz'
 import { ChatMessage, ChatHistoryItem } from '../models/chatModel'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
@@ -29,7 +29,7 @@ export class ChatController {
 
   sendMessage(): void {
     const content = this.vm.inputContent.trim()
-
+    LogUtil.iPrivate('ChatController', '用户发送: %{private}s', content)
     if (!content || this.vm.isLoading) {
       return
     }
@@ -118,7 +118,7 @@ export class ChatController {
         },
 
         onError: (errMsg: string) => {
-          console.error('[ChatController] stream error', errMsg)
+          LogUtil.e('ChatController', 'stream error: ' + errMsg)
 
           if (this.activeAiMessage) {
             this.activeAiMessage.content = '生成失败，请稍后重试'

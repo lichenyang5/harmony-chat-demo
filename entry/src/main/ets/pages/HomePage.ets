@@ -5,7 +5,7 @@ import { AppTabState } from '../viewmodel/AppTabState'
 import { HomeTabComp } from '../components/HomeTabComp'
 import { ChatTabComp, ChatLoadState, getChatLoadState } from 'chat'
 import { ProfileTabComp } from '../components/ProfileTabComp'
-import { WindowUtil } from 'common'
+import { WindowUtil, LogUtil } from 'common'
 import { AuthPersist, getAuthPersist } from '../utils/AuthPersist'
 import { ThemeState, getThemeState } from '../viewmodel/ThemeState'
 
@@ -55,7 +55,7 @@ export struct HomePage {
   }
 
   aboutToAppear(): void {
-    console.log('ooo这是混淆测试')
+    LogUtil.i('HomePage', 'ooo这是混淆测试')
   }
 
   /**

@@ -1,4 +1,5 @@
 import { window } from '@kit.ArkUI'
+import { LogUtil } from './LogUtil'
 
 /**
  * 屏幕安全区工具
@@ -39,7 +40,7 @@ export class WindowUtil {
       console.info('[WindowUtil] init — statusBar:', statusBarHeight,
         'navBar:', navBarHeight, 'indicator:', indicatorHeight)
     } catch (e) {
-      console.error('[WindowUtil] init failed', JSON.stringify(e))
+      LogUtil.e('WindowUtil', 'init failed: ' + JSON.stringify(e))
     }
   }
 

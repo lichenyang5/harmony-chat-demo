@@ -1,5 +1,6 @@
 import { window, display } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
+import { LogUtil } from './LogUtil'
 
 /**
  * 键盘监听控制器（通用工具）。
@@ -57,7 +58,7 @@ export class KeyboardController {
         onHeightChange(heightVp, isShowing)
       })
     } catch (e) {
-      console.error('[KeyboardController] init failed', JSON.stringify(e))
+      LogUtil.e('KeyboardController', 'init failed: ' + JSON.stringify(e))
     }
   }
 

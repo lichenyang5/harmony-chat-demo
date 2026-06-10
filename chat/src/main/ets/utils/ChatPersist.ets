@@ -1,5 +1,6 @@
 import { preferences } from '@kit.ArkData'
 import { common } from '@kit.AbilityKit'
+import { LogUtil } from 'common'
 import { ChatSession } from '../models/chatModel'
 
 const STORE_NAME = 'chat_history'   // Preferences 文件名（一个 App 可以有多个）
@@ -22,7 +23,7 @@ export function loadSessions(ctx: common.UIAbilityContext): ChatSession[] {
     // 倒序：最新的对话排最前
     return list.sort((a, b) => b.updateTime - a.updateTime)
   } catch (e) {
-    console.error('[ChatPersist] loadSessions failed', JSON.stringify(e))
+    LogUtil.e('ChatPersist', 'loadSessions failed: ' + JSON.stringify(e))
     return []
   }
 }
@@ -47,7 +48,7 @@ export function saveSession(ctx: common.UIAbilityContext, session: ChatSession):
     store.putSync(KEY_SESSIONS, JSON.stringify(list))
     store.flush()   // flush：把内存缓存写入磁盘（异步，不阻塞 UI）
   } catch (e) {
-    console.error('[ChatPersist] saveSession failed', JSON.stringify(e))
+    LogUtil.e('ChatPersist', 'saveSession failed: ' + JSON.stringify(e))
   }
 }
 
@@ -60,6 +61,6 @@ export function deleteSession(ctx: common.UIAbilityContext, sessionId: string): 
     store.putSync(KEY_SESSIONS, JSON.stringify(list))
     store.flush()
   } catch (e) {
-    console.error('[ChatPersist] deleteSession failed', JSON.stringify(e))
+    LogUtil.e('ChatPersist', 'deleteSession failed: ' + JSON.stringify(e))
   }
 }

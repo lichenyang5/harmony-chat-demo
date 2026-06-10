@@ -3,6 +3,7 @@ import {
   HMInterceptorInfo,
   IHMInterceptor
 } from '@hadss/hmrouter'
+import { LogUtil } from 'common'
 
 export class SameRouteInterceptor implements IHMInterceptor {
   interceptorName: string = 'SameRouteInterceptor'
@@ -12,10 +13,10 @@ export class SameRouteInterceptor implements IHMInterceptor {
     const fromPage: string = info.srcName ?? ''
     const targetPage: string = info.targetName ?? ''
 
-    console.log(`[SameRouteInterceptor] from=${fromPage}, target=${targetPage}`)
-
+    // console.log(`[SameRouteInterceptor] from=${fromPage}, target=${targetPage}`)
+    LogUtil.i('SameRouteInterceptor', `from=${fromPage}, target=${targetPage}`)
     if (fromPage.length > 0 && targetPage.length > 0 && fromPage === targetPage) {
-      console.log('[SameRouteInterceptor] 相同路由，拦截跳转')
+      LogUtil.i('SameRouteInterceptor', '相同路由，拦截跳转')
       return HMInterceptorAction.DO_REJECT
     }
 
