@@ -864,7 +864,7 @@ const res = await sendChatMessage(requestParams)
 
 ## 二十五、可能遇到的问题
 
-### 1. Cannot find module '../utils/ChatStorage'
+### 1. 找不到模块 '../utils/ChatStorage'
 
 原因：
 
@@ -886,7 +886,7 @@ entry/src/main/ets/utils/ChatStorage.ets
 import { ChatStorage } from '../utils/ChatStorage'
 ```
 
-### 2. Cannot find module '../models/ChatModel'
+### 2. 找不到模块 '../models/ChatModel'
 
 原因：
 
