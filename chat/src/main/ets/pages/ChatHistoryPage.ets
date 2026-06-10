@@ -51,20 +51,20 @@ export struct ChatHistoryPage {
 
   // ─── 私有方法（薄封装，仅做参数准备，逻辑在 controller 中）──────────────────
 
-  /** 从 Preferences 加载会话列表并更新 UI */
-  private loadData(): void {
+  /** 从 RDB 加载会话列表并更新 UI（异步） */
+  private async loadData(): Promise<void> {
     if (!this.ctx) {
       return
     }
-    this.sessions = this.controller.loadData(this.ctx)
+    this.sessions = await this.controller.loadData(this.ctx)
   }
 
-  /** 删除指定会话并更新本地列表 */
-  private onDelete(sessionId: string): void {
+  /** 删除指定会话并更新本地列表（异步） */
+  private async onDelete(sessionId: string): Promise<void> {
     if (!this.ctx) {
       return
     }
-    this.sessions = this.controller.deleteSession(this.ctx, sessionId, this.sessions)
+    this.sessions = await this.controller.deleteSession(this.ctx, sessionId, this.sessions)
   }
 
   // ─── UI ───────────────────────────────────────────────────────────────────
