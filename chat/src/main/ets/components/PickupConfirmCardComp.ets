@@ -1,287 +1,368 @@
-import { ThemeState, getThemeState } from 'common'
-import { PickupCard, PickupPoint } from '../models/chatModel'
+import { PickupCard } from '../models/chatModel'
+import { PathShape } from '@kit.ArkUI'
 
 /**
- * 确认上车点卡片（票据风格）
+ * 确认上车点卡片（票根风格 — 纯 UI 复刻版）
+ *
+ * 当前阶段所有文本写死，不读 card 字段，避免后端字段缺失导致渲染崩溃。
+ * card 参数保留只是为了兼容外部调用方（ChatListComp 在传 card）。
  *
  * 结构：
- *   Column (整体白底, borderRadius 16, clip true)
- *   ├── Header Column   linearGradient 右上蓝→左下白（仅 header）
- *   │   ├── Stack       标题 + 黄色色条(宽度跟随标题字数)
- *   │   └── Row         左侧轴(?-虚线-📍) + 右侧两行文字
- *   ├── TicketDivider   @Builder：水平虚线 + 左右半圆挖洞
- *   ├── List            上车点；首项含「进站口」按钮 + 三横线图标
- *   └── Footer Column   「查看更多」浅蓝底蓝字按钮
- *
- * 半圆凹口原理：
- *   Circle 在 Row 内通过 .offset({x:±NOTCH_D/2}) 把圆心移到卡片左/右边缘。
- *   外层卡片 .clip(true) 把落在卡片外的半圆裁掉，留下半圆挖洞效果。
- *   圆色 = theme.bg（外部气泡列表背景），与白色卡片对比明显。
+ *   Stack
+ *   └── Column（clipShape PathShape + shadow + onAreaChange）
+ *       ├── TicketHeader：渐变蓝抬头 + 黄高亮标题 + RouteRow（左 ?/虚线/📍 + 右文字）
+ *       ├── 撕线（高 0 + dashed top border）
+ *       └── 白色区：3 个 POI 项 + 2 条分隔线 + 查看更多
  */
 @ComponentV2
 export struct PickupConfirmCardComp {
   @Param @Require card: PickupCard
 
-  @Local theme: ThemeState = getThemeState()
+  @Local cardWidth: number = 0     // px
+  @Local cardHeight: number = 0    // px
+  @Local notchY: number = 0        // 缺口中心 y, px
+  @Local headerH: number = 0       // 抬头高, vp
 
-  // 票据凹口直径
-  private static readonly NOTCH_D: number = 14
+  private readonly cornerRadius: number = 16
+  private readonly notchRadius: number = 9
 
-  // 左轴每段高度（问号 / 虚线 / 地图），三段相加 = 文字两行 + 间隔
-  private static readonly AXIS_SEG: number = 14
+  /** 票根轮廓 path：4 圆角 + 左右半圆缺口；首帧 / 太矮 / 越界都有兜底 */
+  getCardPath(): string {
+    const w = this.cardWidth
+    const h = this.cardHeight
 
-  // 标题字号
-  private static readonly TITLE_FS: number = 22
+    if (w <= 0 || h <= 0) {
+      return 'M0 0 L2000 0 L2000 2000 L0 2000 Z'
+    }
 
-  // 黄色色条宽度：每个中文字宽 ≈ fontSize，再加少量 padding
-  private titleStripWidth(): number {
-    return this.card.title.length * PickupConfirmCardComp.TITLE_FS + 4
+    const r = vp2px(this.cornerRadius)
+    const nr = vp2px(this.notchRadius)
+    const minNy = r + nr
+    const maxNy = h - r - nr
+
+    if (maxNy <= minNy) {
+      return `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r}`
+        + ` V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h}`
+        + ` H ${r} A ${r} ${r} 0 0 1 0 ${h - r}`
+        + ` V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`
+    }
+
+    let ny = this.notchY > nr ? this.notchY : h / 2
+    if (ny < minNy) ny = minNy
+    if (ny > maxNy) ny = maxNy
+
+    return `M ${r} 0`
+      + ` H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r}`
+      + ` V ${ny - nr} A ${nr} ${nr} 0 0 0 ${w} ${ny + nr}`
+      + ` V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h}`
+      + ` H ${r} A ${r} ${r} 0 0 1 0 ${h - r}`
+      + ` V ${ny + nr} A ${nr} ${nr} 0 0 0 0 ${ny - nr}`
+      + ` V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`
   }
 
-  // ───────────── @Builder：票据切割线（水平虚线 + 左右半圆挖洞） ─────────────
-  @Builder
-  TicketDivider() {
-    Stack({ alignContent: Alignment.Center }) {
-      // 中间水平虚线
-      Line()
-        .height(1)
-        .startPoint([0, 0])
-        .endPoint([1000, 0])
-        .stroke(this.theme.divider)
-        .strokeWidth(1)
-        .strokeDashArray([4, 4])
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        // ============ 渐变抬头 ============
+        this.TicketHeader()
+
+        // ============ 撕线 ============
+        Row()
+          .width('100%')
+          .height(0)
+          .border({
+            width: { top: 1 },
+            color: '#1A000000',
+            style: BorderStyle.Dashed
+          })
+
+        // ============ 白色区：3 项 POI + 分隔线 + 查看更多 ============
+        Column({ space: 16 }) {
+          this.LocationItemFull()
+          this.Divider()
+          this.LocationItemSimple('2', '高铁西九龙站(K出口)')
+          this.Divider()
+          this.LocationItemSimple('3', '高铁西九龙站(K出口)')
+          this.MoreButton()
+        }
+        .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .margin({ left: 12, right: 12 })
-
-      // 左右挖洞：圆心通过 offset 移到卡片左/右边界
-      Row() {
-        Circle({ width: PickupConfirmCardComp.NOTCH_D, height: PickupConfirmCardComp.NOTCH_D })
-          .fill(this.theme.bg)
-          .offset({ x: -PickupConfirmCardComp.NOTCH_D / 2, y: 0 })
-
-        Blank()
-
-        Circle({ width: PickupConfirmCardComp.NOTCH_D, height: PickupConfirmCardComp.NOTCH_D })
-          .fill(this.theme.bg)
-          .offset({ x: PickupConfirmCardComp.NOTCH_D / 2, y: 0 })
+        .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+        .backgroundColor(Color.White)
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .backgroundColor(Color.White)
+      .clipShape(new PathShape({ commands: this.getCardPath() }))
+      .shadow({
+        radius: 14,
+        color: '#22000000',
+        offsetX: 0,
+        offsetY: 6
+      })
+      .onAreaChange((_o: Area, n: Area) => {
+        this.cardWidth = vp2px(Number(n.width))
+        this.cardHeight = vp2px(Number(n.height))
+      })
     }
     .width('100%')
-    .height(PickupConfirmCardComp.NOTCH_D)
+    .constraintSize({ maxWidth: '92%' })
   }
 
-  // ───────────── @Builder：左侧轴（问号 - 虚线 - 地图） ─────────────
+  // ────── @Builder：渐变抬头 ──────
   @Builder
-  LeftAxis() {
-    Column() {
-      // 问号
-      Text('?')
-        .fontSize(10)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.theme.textPrimary)
-        .width(PickupConfirmCardComp.AXIS_SEG)
-        .height(PickupConfirmCardComp.AXIS_SEG)
-        .textAlign(TextAlign.Center)
-        .border({
-          width: 1.2,
-          color: this.theme.textPrimary,
-          radius: PickupConfirmCardComp.AXIS_SEG / 2
+  TicketHeader() {
+    Stack() {
+      // 背景层：品牌蓝 + 横向白→透
+      Column()
+        .width('100%')
+        .height(this.headerH)
+        .backgroundColor('#FF00B5D9')
+        .linearGradient({
+          angle: 90,
+          colors: [['#FFFFFFFF', 0.0], ['#00FFFFFF', 1.0]]
         })
 
-      // 纵向虚线
-      Line()
-        .width(1)
-        .height(PickupConfirmCardComp.AXIS_SEG)
-        .startPoint([0, 0])
-        .endPoint([0, PickupConfirmCardComp.AXIS_SEG])
-        .stroke(this.theme.textTertiary)
-        .strokeWidth(1)
-        .strokeDashArray([2, 2])
+      // 内容层 + 纵向半透白→白
+      Column() {
+        // 标题 + 102×8 黄高亮
+        Stack({ alignContent: Alignment.BottomStart }) {
+          Row()
+            .width(100)
+            .height(8)
+            .backgroundColor('#FFD91A')
+            .borderRadius(4)
 
-      // 地图图标
-      Image($r('app.media.location'))
-        .width(PickupConfirmCardComp.AXIS_SEG)
-        .height(PickupConfirmCardComp.AXIS_SEG)
-        .objectFit(ImageFit.Contain)
+          Text('确认上车点')
+            .fontSize(20)
+            .lineHeight(24)
+            .fontWeight(FontWeight.Bold)
+            .fontColor('#E6000000')
+        }
+
+        this.RouteRow()
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+      .linearGradient({
+        angle: 180,
+        colors: [['#B3FFFFFF', 0.0], ['#FFFFFFFF', 1.0]]
+      })
+      .onAreaChange((_o: Area, n: Area) => {
+        this.headerH = Number(n.height)
+        this.notchY = vp2px(Number(n.height))
+      })
     }
-    .width(PickupConfirmCardComp.AXIS_SEG)
-    .alignItems(HorizontalAlign.Center)
+    .width('100%')
   }
 
-  // ───────────── @Builder：列表项 ─────────────
+  // ────── @Builder：路由行（左 12 宽 Column 装 ?/虚线/📍，右文字 Column） ──────
   @Builder
-  buildPointItem(p: PickupPoint, isFirst: boolean) {
+  RouteRow() {
+    Row() {
+      // 左列：? + 虚线 + 📍
+      Column() {
+        // 问号：直接用 Text 当带背景圆，textAlign+lineHeight 让 "?" 严格几何居中
+        Text('?')
+          .fontSize(8)
+          .fontColor('#FFFFFF')
+          .textAlign(TextAlign.Center)
+          .width(12)
+          .height(12)
+          .lineHeight(12)
+          .backgroundColor('#E6000000')
+          .borderRadius(256)
+          .margin({ top: 2 })
+
+        Line()
+          .width(1)
+          .height(12)
+          .startPoint([0, 0])
+          .endPoint([0, 12])
+          .stroke('#B5BAC4')
+          .strokeWidth(1)
+          .strokeDashArray([2, 2])
+
+        Image($r('app.media.location'))
+          .width(12)
+          .height(12)
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
+          // 跟虚线之间留 2vp gap，避免虚线贴到图标上沿（这个图标占满 12×12，没有内边距）
+          .margin({ top: 2 })
+      }
+      .width(12)
+      .alignItems(HorizontalAlign.Center)
+
+      // 右列：question + currentLocation（写死）
+      Column() {
+        Text('您在哪里上车?')
+          .fontSize(12)
+          .lineHeight(16)
+          .fontColor('#E6000000')
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text('香港中国企业协会')
+          .fontSize(12)
+          .lineHeight(16)
+          .fontColor('#66000000')
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .margin({top:10})
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.margin({left:4})
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Top)
+    .margin({top:22})
+  }
+
+  // ────── @Builder：序号圆点 ──────
+  @Builder
+  IndexBadge(num: string) {
+    Stack() {
+      Circle({ width: 16, height: 16 }).fill('#FF00B5D9')
+      Text(num)
+        .fontSize(10)
+        .fontColor('#FFFFFF')
+        .fontWeight(FontWeight.Bold)
+    }
+    .width(16)
+    .height(16)
+  }
+
+  // ────── @Builder：分隔线 ──────
+  @Builder
+  Divider() {
+    Row()
+      .width('100%')
+      .height(0.5)
+      .backgroundColor('#1A000000')
+  }
+
+  // ────── @Builder：第 1 项 POI（完整，带进站口 + 三横线菜单） ──────
+  @Builder
+  LocationItemFull() {
     Column({ space: 6 }) {
       // 序号 + 名称 + 距离
       Row() {
-        Text(p.index.toString())
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#FFFFFF')
-          .width(20)
-          .height(20)
-          .textAlign(TextAlign.Center)
-          .backgroundColor('#0E5BCC')
-          .borderRadius(10)
+        this.IndexBadge('1')
 
-        Text(p.name)
-          .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.theme.textPrimary)
-          .margin({ left: 8 })
+        Text('香港西九龙站')
+          .margin({ left: 4 })
+          .fontSize(14)
+          .lineHeight(18)
+          .fontColor('#E6000000')
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
-        Text(p.distance)
-          .fontSize(13)
-          .fontColor(this.theme.textSecondary)
+        Text('65.9km')
+          .fontSize(10)
+          .lineHeight(12)
+          .fontColor('#99000000')
+          .margin({ left: 4 })
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
 
-      // 地址（左缩进 28 与名称对齐）
-      Text(p.address)
-        .fontSize(13)
-        .fontColor(this.theme.textSecondary)
-        .margin({ left: 28 })
+      // 地址
+      Text('香港特别行政区油尖旺区柯士甸道西3号')
+        .fontSize(12)
+        .lineHeight(16)
+        .fontColor('#99000000')
+        .width('100%')
 
-      // 首项额外：进站口按钮 + 三横线图标
-      if (isFirst && p.entrance) {
-        Row({ space: 8 }) {
-          Text(p.entrance)
-            .fontSize(13)
-            .fontColor(this.theme.textPrimary)
-            .layoutWeight(1)
-            .height(32)
-            .textAlign(TextAlign.Center)
-            .backgroundColor('#FFFFFF')
-            .borderRadius(8)
-            .border({ width: 1, color: this.theme.divider })
+      // 进站口 chip + 三横线菜单
+      Row() {
+        Text('进站口1')
+          .fontSize(12)
+          .lineHeight(16)
+          .fontColor('#E6000000')
+          .fontWeight(FontWeight.Regular)
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center)
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .border({ width: 1, color: '#1A000000', radius: 8 })
 
-          Column({ space: 3 }) {
-            Row().width(14).height(2).backgroundColor(this.theme.textSecondary).borderRadius(1)
-            Row().width(14).height(2).backgroundColor(this.theme.textSecondary).borderRadius(1)
-            Row().width(14).height(2).backgroundColor(this.theme.textSecondary).borderRadius(1)
-          }
-          .width(32)
-          .height(32)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .backgroundColor('#FFFFFF')
-          .borderRadius(8)
-          .border({ width: 1, color: this.theme.divider })
+        Column() {
+          Image($r('app.media.list'))
+            .width(14)
+            .height(14)
+            .objectFit(ImageFit.Contain)
+            .draggable(false)
         }
-        .margin({ left: 28, top: 4 })
+        .padding(7)
+        .border({ width: 1, color: '#1A000000', radius: 8 })
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .margin({left:4})
       }
+      .width('100%')
+      .alignItems(VerticalAlign.Bottom)
+      .margin({ top: 4 })
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .padding({ top: 10, bottom: 10 })
   }
 
-  // ───────────── build ─────────────
-  build() {
-    Column() {
-      // ============ Header（仅 header 内做渐变：右上蓝 → 左下白，底部变白） ============
-      Stack({ alignContent: Alignment.TopStart }) {
-        // 背景层：左白 -> 右蓝
-        Column()
-          .width('100%')
-          .height(112)
-          .linearGradient({
-            angle: 90,
-            colors: [
-              ['#FFFFFFFF', 0.0],
-              ['#FFFFFFFF', 0.03],
-              ['#FFF2FCFF', 0.35],
-              ['#FFDDF8FF', 1.0]
-            ]
-          })
+  // ────── @Builder：第 2 / 3 项 POI（无进站口） ──────
+  @Builder
+  LocationItemSimple(num: string, name: string) {
+    Column({ space: 6 }) {
+      // 序号 + 名称 + 距离
+      Row() {
+        this.IndexBadge(num)
 
-        // 内容层：底部渐变白
-        Column({ space: 14 }) {
-          Stack({ alignContent: Alignment.BottomStart }) {
-            Column()
-              .width(this.titleStripWidth())
-              .height(10)
-              .backgroundColor('#FFEB7A')
-
-            Text(this.card.title)
-              .fontSize(PickupConfirmCardComp.TITLE_FS)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.theme.textPrimary)
-          }
-
-          Row({ space: 10 }) {
-            this.LeftAxis()
-
-            Column() {
-              Text(this.card.question)
-                .fontSize(13)
-                .fontColor(this.theme.textPrimary)
-                .height(PickupConfirmCardComp.AXIS_SEG)
-
-              Blank().height(PickupConfirmCardComp.AXIS_SEG)
-
-              Text(this.card.currentLocation)
-                .fontSize(13)
-                .fontColor(this.theme.textPrimary)
-                .height(PickupConfirmCardComp.AXIS_SEG)
-            }
-            .alignItems(HorizontalAlign.Start)
-            .height(PickupConfirmCardComp.AXIS_SEG * 3)
-            .justifyContent(FlexAlign.SpaceBetween)
-          }
-          .alignItems(VerticalAlign.Top)
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-        .padding({ left: 20, right: 20, top: 20, bottom: 16 })
-        .linearGradient({
-          angle: 180,
-          colors: [
-            ['#00FFFFFF', 0.0],
-            ['#00FFFFFF', 0.45],
-            ['#99FFFFFF', 0.82],
-            ['#FFFFFFFF', 1.0]
-          ]
-        })
-      }
-      .width('100%')
-      // ============ 票据切割线 ============
-      this.TicketDivider()
-
-      // ============ List：上车点 ============
-      List({ space: 4 }) {
-        ForEach(this.card.points, (p: PickupPoint, idx: number) => {
-          ListItem() {
-            this.buildPointItem(p, idx === 0)
-          }
-        }, (p: PickupPoint) => p.index + '_' + p.name)
-      }
-      .width('100%')
-      .padding({ left: 20, right: 20, top: 8, bottom: 8 })
-
-      // ============ Footer：查看更多按钮（浅蓝底蓝字） ============
-      Column() {
-        Text(this.card.moreText)
-          .fontSize(15)
+        Text(name)
+          .margin({ left: 4 })
+          .fontSize(14)
+          .lineHeight(18)
+          .fontColor('#E6000000')
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.theme.primary)
-          .width('100%')
-          .height(44)
-          .textAlign(TextAlign.Center)
-          .backgroundColor('#E6F0FF')
-          .borderRadius(8)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+
+        Text('65.9km')
+          .fontSize(10)
+          .lineHeight(12)
+          .fontColor('#99000000')
+          .margin({ left: 4 })
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 4, bottom: 16 })
+
+      // 地址
+      Text('香港特别行政区油尖旺区柯士甸道西3号')
+        .fontSize(12)
+        .lineHeight(16)
+        .fontColor('#99000000')
+        .width('100%')
     }
     .width('100%')
-    .backgroundColor('#FFFFFF')
-    .borderRadius(16)
-    .clip(true)
-    .constraintSize({ maxWidth: '92%' })
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  // ────── @Builder：查看更多 ──────
+  @Builder
+  MoreButton() {
+    Row() {
+      Text('查看更多')
+        .fontSize(12)
+        .lineHeight(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#FF00B5D9')
+    }
+    .justifyContent(FlexAlign.Center)
+    .width('100%')
+    .padding({ top: 10, bottom: 10 })
+    .backgroundColor('#1A00B5D9')
+    .borderRadius(8)
   }
 }
