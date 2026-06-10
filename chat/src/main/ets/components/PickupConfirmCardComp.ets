@@ -1,11 +1,10 @@
-import { PickupCard } from '../models/chatModel'
+import { PickupCard, PickupPoint } from '../models/chatModel'
 import { PathShape } from '@kit.ArkUI'
 
 /**
- * 确认上车点卡片（票根风格 — 纯 UI 复刻版）
+ * 确认上车点卡片（票根风格 — 数据驱动版）
  *
- * 当前阶段所有文本写死，不读 card 字段，避免后端字段缺失导致渲染崩溃。
- * card 参数保留只是为了兼容外部调用方（ChatListComp 在传 card）。
+ * 所有文本来自 @Param card 字段，由后端 done 帧一次性下发。
  *
  * 结构：
  *   Stack
@@ -76,13 +75,18 @@ export struct PickupConfirmCardComp {
             style: BorderStyle.Dashed
           })
 
-        // ============ 白色区：3 项 POI + 分隔线 + 查看更多 ============
+        // ============ 白色区：N 项 POI + 分隔线 + 查看更多 ============
         Column({ space: 16 }) {
-          this.LocationItemFull()
-          this.Divider()
-          this.LocationItemSimple('2', '高铁西九龙站(K出口)')
-          this.Divider()
-          this.LocationItemSimple('3', '高铁西九龙站(K出口)')
+          ForEach(this.card.points, (_p: PickupPoint, i: number) => {
+            if (i > 0) {
+              this.Divider()
+            }
+            if (i === 0) {
+              this.LocationItemFull(0)
+            } else {
+              this.LocationItemSimple(i)
+            }
+          })
           this.MoreButton()
         }
         .alignItems(HorizontalAlign.Start)
@@ -132,7 +136,7 @@ export struct PickupConfirmCardComp {
             .backgroundColor('#FFD91A')
             .borderRadius(4)
 
-          Text('确认上车点')
+          Text(this.card.title)
             .fontSize(20)
             .lineHeight(24)
             .fontWeight(FontWeight.Bold)
@@ -162,7 +166,6 @@ export struct PickupConfirmCardComp {
     Row() {
       // 左列：? + 虚线 + 📍
       Column() {
-        // 问号：直接用 Text 当带背景圆，textAlign+lineHeight 让 "?" 严格几何居中
         Text('?')
           .fontSize(8)
           .fontColor('#FFFFFF')
@@ -174,29 +177,37 @@ export struct PickupConfirmCardComp {
           .borderRadius(256)
           .margin({ top: 2 })
 
+        // Line()
+        //   .width(12)
+        //   .height(18)
+        //   .startPoint([6, 0])
+        //   .endPoint([6, 18])
+        //   .stroke('#B5BAC4')
+        //   .strokeWidth(1)
+        //   .strokeDashArray([2, 2])
+        // 6段
+
         Line()
-          .width(1)
-          .height(12)
-          .startPoint([0, 0])
-          .endPoint([0, 12])
+          .width(12)
+          .height(18)
+          .startPoint([6, 0])
+          .endPoint([6, 18])
           .stroke('#B5BAC4')
           .strokeWidth(1)
-          .strokeDashArray([2, 2])
-
+          .strokeDashArray([4, 3])
+        //   三段
         Image($r('app.media.location'))
           .width(12)
           .height(12)
           .objectFit(ImageFit.Contain)
           .draggable(false)
-          // 跟虚线之间留 2vp gap，避免虚线贴到图标上沿（这个图标占满 12×12，没有内边距）
-          .margin({ top: 2 })
       }
       .width(12)
       .alignItems(HorizontalAlign.Center)
 
-      // 右列：question + currentLocation（写死）
+      // 右列：question + currentLocation
       Column() {
-        Text('您在哪里上车?')
+        Text(this.card.question)
           .fontSize(12)
           .lineHeight(16)
           .fontColor('#E6000000')
@@ -204,13 +215,13 @@ export struct PickupConfirmCardComp {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        Text('香港中国企业协会')
+        Text(this.card.currentLocation)
           .fontSize(12)
           .lineHeight(16)
           .fontColor('#66000000')
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
-          .margin({top:10})
+          .margin({top:14})
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }.margin({left:4})
       .alignItems(HorizontalAlign.Start)
@@ -218,7 +229,7 @@ export struct PickupConfirmCardComp {
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)
-    .margin({top:22})
+    .margin({top:16})
   }
 
   // ────── @Builder：序号圆点 ──────
@@ -246,13 +257,13 @@ export struct PickupConfirmCardComp {
 
   // ────── @Builder：第 1 项 POI（完整，带进站口 + 三横线菜单） ──────
   @Builder
-  LocationItemFull() {
+  LocationItemFull(index: number) {
     Column({ space: 6 }) {
       // 序号 + 名称 + 距离
       Row() {
-        this.IndexBadge('1')
+        this.IndexBadge(this.card.points[index].index.toString())
 
-        Text('香港西九龙站')
+        Text(this.card.points[index].name)
           .margin({ left: 4 })
           .fontSize(14)
           .lineHeight(18)
@@ -262,7 +273,7 @@ export struct PickupConfirmCardComp {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
-        Text('65.9km')
+        Text(this.card.points[index].distance)
           .fontSize(10)
           .lineHeight(12)
           .fontColor('#99000000')
@@ -271,7 +282,7 @@ export struct PickupConfirmCardComp {
       .width('100%')
 
       // 地址
-      Text('香港特别行政区油尖旺区柯士甸道西3号')
+      Text(this.card.points[index].address)
         .fontSize(12)
         .lineHeight(16)
         .fontColor('#99000000')
@@ -279,7 +290,7 @@ export struct PickupConfirmCardComp {
 
       // 进站口 chip + 三横线菜单
       Row() {
-        Text('进站口1')
+        Text(this.card.points[index].entrance)
           .fontSize(12)
           .lineHeight(16)
           .fontColor('#E6000000')
@@ -314,13 +325,13 @@ export struct PickupConfirmCardComp {
 
   // ────── @Builder：第 2 / 3 项 POI（无进站口） ──────
   @Builder
-  LocationItemSimple(num: string, name: string) {
+  LocationItemSimple(index: number) {
     Column({ space: 6 }) {
       // 序号 + 名称 + 距离
       Row() {
-        this.IndexBadge(num)
+        this.IndexBadge(this.card.points[index].index.toString())
 
-        Text(name)
+        Text(this.card.points[index].name)
           .margin({ left: 4 })
           .fontSize(14)
           .lineHeight(18)
@@ -330,7 +341,7 @@ export struct PickupConfirmCardComp {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
 
-        Text('65.9km')
+        Text(this.card.points[index].distance)
           .fontSize(10)
           .lineHeight(12)
           .fontColor('#99000000')
@@ -339,7 +350,7 @@ export struct PickupConfirmCardComp {
       .width('100%')
 
       // 地址
-      Text('香港特别行政区油尖旺区柯士甸道西3号')
+      Text(this.card.points[index].address)
         .fontSize(12)
         .lineHeight(16)
         .fontColor('#99000000')
@@ -353,7 +364,7 @@ export struct PickupConfirmCardComp {
   @Builder
   MoreButton() {
     Row() {
-      Text('查看更多')
+      Text(this.card.moreText)
         .fontSize(12)
         .lineHeight(12)
         .fontWeight(FontWeight.Medium)
