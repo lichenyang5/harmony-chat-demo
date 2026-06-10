@@ -2,7 +2,7 @@ import { ChatRoutes } from '../constants/ChatRoutes'
 import { HMRouter, HMRouterMgr, HMLifecycleState } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
-import { HMUtil, ThemeState, getThemeState } from 'common'
+import { HMUtil, ThemeState, getThemeState, LogUtil } from 'common'
 import { ChatHistoryController } from '../controller/ChatHistoryController'
 
 /**
@@ -39,7 +39,7 @@ export struct ChatHistoryPage {
     HMRouterMgr.getCurrentLifecycleOwner()?.addObserver(
       HMLifecycleState.onShown,
       () => {
-        console.log('[ChatHistoryPage] onShown 触发，刷新列表')
+        LogUtil.i('ChatHistoryPage', 'onShown 触发，刷新列表')
         this.loadData()
       }
     )

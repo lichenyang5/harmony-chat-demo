@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit'
+import { LogUtil } from 'common'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
 import { loadSessions, saveSession } from '../utils/ChatPersist'
@@ -50,7 +51,7 @@ export class ChatSessionController {
     const target = sessions.find((s: ChatSession) => s.id === id)
 
     if (!target) {
-      console.warn('[ChatSessionController] session not found:', id)
+      LogUtil.w('ChatSessionController', 'session not found: ' + id)
       return false
     }
 
