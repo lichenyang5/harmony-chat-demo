@@ -1,8 +1,8 @@
 import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
-import { loadSessions, deleteSession as persistDeleteSession } from '../utils/ChatPersist'
 import { getChatLoadState } from '../viewmodel/ChatLoadState'
 import { HMUtil } from 'common'
+import { ChatRdb } from '../utils/ChatRdb'
 
 /**
  * 消息记录页控制器。
@@ -20,23 +20,27 @@ export class ChatHistoryController {
    * @param ctx UIAbility 上下文（Preferences 读取需要）
    * @returns 会话列表，读取失败时返回空数组
    */
-  loadData(ctx: common.UIAbilityContext): ChatSession[] {
-    return loadSessions(ctx)
+  async  loadData(ctx: common.UIAbilityContext): Promise<ChatSession[]> {
+    return await ChatRdb.loadSessions()
   }
 
   /**
    * 删除指定会话。
    *
-   * 先从 Preferences 删除，再从传入列表中过滤掉对应项并返回新列表。
-   * 使用本地过滤而非重新读文件，避免列表闪烁。
+   * 先从 RDB 删除（session 表 + 该 sessionId 的所有 message 行），
+   * 再从传入列表中过滤掉对应项并返回新列表。
+   * 使用本地过滤而非重新查询数据库，避免列表闪烁。
    *
-   * @param ctx UIAbility 上下文（Preferences 写入需要）
+   * @param ctx UIAbility 上下文（保留签名兼容，ChatRdb 不依赖 ctx）
    * @param sessionId 要删除的会话 ID
    * @param sessions 当前页面持有的会话列表
    * @returns 移除后的新列表
    */
-  deleteSession(ctx: common.UIAbilityContext, sessionId: string, sessions: ChatSession[]): ChatSession[] {
-    persistDeleteSession(ctx, sessionId)
+  async deleteSession(ctx: common.UIAbilityContext, sessionId: string,
+    sessions: ChatSession[]): Promise<ChatSession[]> {
+    await ChatRdb.deleteSession(sessionId)
+    // 通知 ChatTabComp：若它当前正在显示这个会话，需要重置
+    getChatLoadState().deletedSessionId = sessionId
     return sessions.filter((s: ChatSession) => s.id !== sessionId)
   }
 

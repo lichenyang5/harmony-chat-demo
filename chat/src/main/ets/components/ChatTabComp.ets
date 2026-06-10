@@ -109,9 +109,29 @@ export struct ChatTabComp {
     if (this.vm.isLoading) {
       return
     }
-    // 流式结束，将会话写入 Preferences
+    // 流式结束，将会话写入 RDB
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
     this.sessionController.persistSession(ctx)
+  }
+
+  /**
+   * 监听"会话被删除"信号：
+   * ChatHistoryPage 左滑删除后，若被删的就是当前正在显示的会话，
+   * 直接重置 UI 成新会话，避免用户看到一份"鬼数据"。
+   * 消费完信号必须清零，否则下次删同一 id 时 @Trace 值没变不会再触发。
+   */
+  @Monitor('chatLoadState.deletedSessionId')
+  onDeletedSessionChange(): void {
+    const deletedId = this.chatLoadState.deletedSessionId
+    if (!deletedId) {
+      return
+    }
+    if (this.vm.sessionId === deletedId) {
+      // 直接调 vm.resetForNewSession 而不是 controller.newSession，
+      // 后者会因 isLoading 拒绝重置；既然会话已删，不再保护流式
+      this.vm.resetForNewSession()
+    }
+    this.chatLoadState.deletedSessionId = ''
   }
 
   // ─── UI ───────────────────────────────────────────────────────────────────

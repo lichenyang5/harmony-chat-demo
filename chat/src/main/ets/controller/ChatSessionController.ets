@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit'
 import { LogUtil } from 'common'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
-import { loadSessions, saveSession } from '../utils/ChatPersist'
+import { ChatRdb } from '../utils/ChatRdb'
 
 /**
  * 聊天会话控制器。
@@ -37,29 +37,25 @@ export class ChatSessionController {
   }
 
   /**
-   * 按 ID 从 Preferences 加载会话并恢复到 ViewModel。
+   * 按 ID 从 RDB 加载会话消息并恢复到 ViewModel。
    *
-   * Preferences 存储的是 ChatMessagePlain 普通对象，加载后需逐条
-   * 转换为 ChatMessage（@ObservedV2），以恢复 @Trace 响应能力。
+   * RDB 中 chat_message 表存的是 ChatMessagePlain 普通对象的字段，
+   * 加载后需逐条转换为 ChatMessage（@ObservedV2），以恢复 @Trace 响应能力。
    *
    * @param id 目标会话 ID
-   * @param ctx UIAbility 上下文（Preferences 读取需要）
-   * @returns 加载成功返回 true，会话不存在返回 false
+   * @param ctx UIAbility 上下文（保留签名兼容，ChatRdb 不依赖 ctx）
+   * @returns 加载成功返回 true，会话不存在（无消息）返回 false
    */
-  loadSessionById(id: string, ctx: common.UIAbilityContext): boolean {
-    const sessions = loadSessions(ctx)
-    const target = sessions.find((s: ChatSession) => s.id === id)
+  async loadSessionById(id: string, ctx: common.UIAbilityContext): Promise<boolean> {
+    const sourceMessages: ChatMessagePlain[] = await ChatRdb.loadMessages(id)
 
-    if (!target) {
-      LogUtil.w('ChatSessionController', 'session not found: ' + id)
+    if (sourceMessages.length === 0) {
+      LogUtil.w('ChatSessionController', 'session not found or empty: ' + id)
       return false
     }
 
-    const sourceMessages: ChatMessagePlain[] = target.messages ? target.messages : []
-    const targetId = target.id ? target.id : id
-
-    this.vm.historyMessage = this.convertToObservable(sourceMessages, targetId)
-    this.vm.sessionId = targetId
+    this.vm.historyMessage = this.convertToObservable(sourceMessages, id)
+    this.vm.sessionId = id
     this.vm.inputContent = ''
     this.vm.isLoading = false
     return true
@@ -92,14 +88,14 @@ export class ChatSessionController {
   }
 
   /**
-   * 将当前会话持久化到 Preferences。
+   * 将当前会话持久化到 RDB（session 元数据 + 所有 message 行）。
    *
    * 注意：不能直接 JSON.stringify ChatMessage，@Trace 字段序列化会丢失。
-   * 必须先逐条转换为 ChatMessagePlain，再序列化存储。
+   * 必须先逐条转换为 ChatMessagePlain，再交给 ChatRdb 写表。
    *
-   * @param ctx UIAbility 上下文（Preferences 写入需要）
+   * @param ctx UIAbility 上下文（保留签名兼容，ChatRdb 不依赖 ctx）
    */
-  persistSession(ctx: common.UIAbilityContext): void {
+  async persistSession(ctx: common.UIAbilityContext): Promise<void> {
     if (this.vm.historyMessage.length === 0) {
       return
     }
@@ -110,7 +106,7 @@ export class ChatSessionController {
     }
 
     const session = this.buildSession(plainMessages)
-    saveSession(ctx, session)
+    await ChatRdb.saveSession(session)
   }
 
   /**

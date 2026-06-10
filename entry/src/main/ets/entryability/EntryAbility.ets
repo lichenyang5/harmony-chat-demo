@@ -4,6 +4,8 @@ import { window } from '@kit.ArkUI';
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { SameRouteInterceptor } from '../interceptors/SameRouteInterceptor'
 import { WindowUtil } from 'common'
+import { ChatRdb } from 'chat';
+
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
@@ -12,6 +14,8 @@ export default class EntryAbility extends UIAbility {
     HMRouterMgr.init({
       context: this.context
     })
+    // 数据库初始化
+    ChatRdb.init(this.context)
     HMRouterMgr.registerGlobalInterceptor({
       interceptor: new SameRouteInterceptor(),
       priority: 100,
