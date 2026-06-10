@@ -2,13 +2,13 @@
 
 > 项目：`MyApplication`（AI 助手 demo）
 > 目标文件：`common/utils/LogUtil.ets`（新建）+ 全模块 11 处 console.* 替换
-> 主题：入职第 4 周才意识到，公司项目里没人写 `console.log` —— 全走 HiLog。我把 demo 的 14 处 `console.log` 替换成自己封装的 `LogUtil` 的过程中，撞了一个反直觉的坑：明明写了 `%{private}s`，**用户输入的"确认打车"还是明文打到日志里了**。本篇把这次替换的全流程和那个困惑的真相一起记下来。
+> 主题：入职第 4 周才意识到，工业级 ArkTS 项目里没人写 `console.log` —— 全走 HiLog。我把 demo 的 14 处 `console.log` 替换成自己封装的 `LogUtil` 的过程中，撞了一个反直觉的坑：明明写了 `%{private}s`，**用户输入的"确认打车"还是明文打到日志里了**。本篇把这次替换的全流程和那个困惑的真相一起记下来。
 
 ---
 
 ## 一、为什么要把 console.log 全换掉
 
-之前我看公司项目 `lushu_appcommon/.../Log.ets`，里面用的是：
+之前我看过一个成熟 ArkUI 项目里的日志工具类，里面用的是：
 
 ```ts
 import { hilog } from '@kit.PerformanceAnalysisKit'
@@ -58,13 +58,13 @@ hilog.fatal(domain, tag, format, ...args)   // 致命，进程级
 
 - 取值范围 `0x0` ~ `0xFFFF`（16 位无符号）
 - 团队内分段，避免互相覆盖 filter 输出
-- 我 demo 整体用一个 `0x0001`，公司项目里可能按模块分（如 chat=0x1001 / search=0x1002）
+- 我 demo 整体用一个 `0x0001`，规模大的项目里通常按模块分（如 chat=0x1001 / search=0x1002）
 
 ### tag（功能标签）
 
 - 字符串，最多 31 字节
 - 一般是类名 / 文件名，hdc 抓 log 时 `--tag` 过滤
-- 公司 `Log.ets` 还做了 URL → tag 映射，按 host 过滤网络日志
+- 成熟项目里还会做 URL → tag 映射，按 host 过滤网络日志
 
 ### 格式化模板 —— 隐私符是核心
 
@@ -136,7 +136,7 @@ LogUtil.iPrivate('ChatController', '用户发送: %{private}s', input)
 
 ## 四、HiLog 单条 ~1024 字节硬上限
 
-我以为日志想多长打多长。结果看到公司 `Log.ets` 里：
+我以为日志想多长打多长。结果看到一份成熟的日志封装里：
 
 ```ts
 private static printLength = 600
@@ -371,22 +371,22 @@ A0001/ChatPersist:               loadSessions failed: ...
 
 ## 八、为什么我没学 HiAppEvent
 
-公司项目里有埋点 —— `coze_agent/helper/TrackingHelper.ets` —— 但**没直接调 `hiAppEvent.write`**：
+我看过的一个成熟 ArkTS 项目里有埋点系统，但**没直接调 `hiAppEvent.write`** —— 而是在业务层和上报通道之间包了一层抽象的事件管线：
 
 ```text
-业务代码（ChatViewModel）
-    ↓ 调 helper.onSend(msg, isPreset, ...)
-TrackingHelper.emit(event)
-    ↓ ① LogUtil.i('cozeTrack', ...)   ← HiLog 出可读日志
-    ↓ ② sink(event)                    ← 业务事件透传
-ChatConfig.onTrackEvent（外层注入的 sink）
+业务代码
+    ↓ 调 helper.onSomething(...)
+事件汇集层 helper.emit(event)
+    ↓ ① LogUtil 出可读日志（开发自查）
+    ↓ ② callback(event)            （业务事件透传）
+外层注入的 sink
     ↓
-atomicTrack(...)                       ← 原子化平台的上报通道
+项目自选的私有上报通道
 ```
 
-也就是说，公司的埋点是走原子化平台的 `atomicTrack`，而不是 HiAppEvent。`hiAppEvent.write` / `addWatcher` 那套 API 我 demo 用不上。
+也就是说，工业级项目通常会包一层 **事件管线 + 抽象上报通道**，业务代码不感知具体上报实现。`hiAppEvent.write` / `addWatcher` 那套裸 API 我 demo 用不上。
 
-按"遇到问题再学"的原则，HiAppEvent 暂时跳过。等公司项目真的要我接 HiAppEvent 时再补。
+按"遇到问题再学"的原则，HiAppEvent 暂时跳过。等真的要接的时候再补。
 
 ---
 
@@ -421,4 +421,3 @@ tag 写类名不重复，文本里别再加前缀；
 
 - [HiLog API（@kit.PerformanceAnalysisKit）](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-hilog)
 - [HiAppEvent 应用事件框架](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/hiappevent-watcher)（等碰到再看）
-- 公司参考代码：`flushu/lushu_appcommon/.../Log.ets`、`flushu/coze_agent/.../TrackingHelper.ets`
