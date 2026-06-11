@@ -161,6 +161,79 @@ export class ThemeState {
   get infoBorder(): string {
     return this.isDark ? '#35415E' : '#DDEAFF'
   }
+
+  // ================= 票根卡（行程确认 / 上车点确认）=================
+  // 亮色值 = 组件里原本的硬编码值（零视觉变化），暗色值为深色推导
+
+  /** 品牌蓝：抬头底色 / 主按钮 / 序号圆（亮暗一致） */
+  get ticketBrand(): string {
+    return '#FF00B5D9'
+  }
+
+  /** 品牌蓝浅底：选择车型 / 查看更多按钮底 */
+  get ticketBrandThin(): string {
+    return this.isDark ? '#3300B5D9' : '#1A00B5D9'
+  }
+
+  /** 黄色高亮条（亮暗一致） */
+  get ticketYellow(): string {
+    return '#FFD91A'
+  }
+
+  /** 卡片底色（暗色转深灰） */
+  get ticketSurface(): string {
+    return this.isDark ? '#2C2C2E' : '#FFFFFF'
+  }
+
+  /** 品牌上的文字：序号圆字 / 问号字 / 主按钮字（亮暗都白） */
+  get ticketOnBrand(): string {
+    return '#FFFFFF'
+  }
+
+  /** 主文字（90%） */
+  get ticketTextHeavy(): string {
+    return this.isDark ? '#E6FFFFFF' : '#E6000000'
+  }
+
+  /** 次文字（60%） */
+  get ticketTextLite(): string {
+    return this.isDark ? '#99FFFFFF' : '#99000000'
+  }
+
+  /** 弱文字（40%） */
+  get ticketTextMuted(): string {
+    return this.isDark ? '#66FFFFFF' : '#66000000'
+  }
+
+  /** 撕线 / 分隔线 / 边框（10%） */
+  get ticketLine(): string {
+    return this.isDark ? '#1AFFFFFF' : '#1A000000'
+  }
+
+  /** 竖向行程虚线 */
+  get ticketDash(): string {
+    return this.isDark ? '#5A5A5E' : '#B5BAC4'
+  }
+
+  /** 卡片阴影 */
+  get ticketShadow(): string {
+    return this.isDark ? '#44000000' : '#22000000'
+  }
+
+  /** 渐变·不透明卡片色（横向起点 + 纵向终点，融入卡底） */
+  get ticketGradOpaque(): string {
+    return this.isDark ? '#FF2C2C2E' : '#FFFFFFFF'
+  }
+
+  /** 渐变·透明（横向终点，透出品牌蓝） */
+  get ticketGradClear(): string {
+    return this.isDark ? '#002C2C2E' : '#00FFFFFF'
+  }
+
+  /** 渐变·70% 卡片色（纵向起点） */
+  get ticketGradVTop(): string {
+    return this.isDark ? '#B32C2C2E' : '#B3FFFFFF'
+  }
 }
 
 /**

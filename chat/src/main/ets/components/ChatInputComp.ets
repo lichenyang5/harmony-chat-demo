@@ -1,3 +1,5 @@
+import { ThemeState, getThemeState } from 'common'
+
 @ComponentV2
 export struct ChatInputComp {
   @Param inputContent: string = ''
@@ -6,6 +8,8 @@ export struct ChatInputComp {
   @Event onInputChange: (val: string) => void = () => {}
   @Event onSend: () => void = () => {}
   @Event onStop: () => void = () => {}
+
+  @Local theme: ThemeState = getThemeState()
 
   build() {
     Row({ space: 12 }) {
@@ -17,7 +21,7 @@ export struct ChatInputComp {
           this.onInputChange(val)
         })
         .layoutWeight(1)
-        .backgroundColor('#F5F5F5')
+        .backgroundColor(this.theme.inputBg)
         .borderRadius(20)
         .padding({ left: 16, right: 16 })
 
@@ -33,6 +37,6 @@ export struct ChatInputComp {
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 12, bottom: 0 })
-    .backgroundColor('#FFFFFF')
+    .backgroundColor(this.theme.surface)
   }
 }
