@@ -2,6 +2,7 @@ import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
 import { ApiConstants } from '../constants/ApiConstants'
 import { LogUtil } from './LogUtil'
+import { getNetMonitor } from '../debug/NetMonitor'
 
 /**
  * SSE 流结束帧的元信息
@@ -58,6 +59,10 @@ export class SseHttpUtil {
     body: Record<string, Object>,
     callbacks: SseCallbacks
   ): http.HttpRequest {
+    // 上报到应用内网络调试面板（release 包为空操作）
+    const monitor = getNetMonitor()
+    const rec = monitor.begin('SSE', ApiConstants.BASE_URL + path, JSON.stringify(body))
+
     const req = http.createHttp()
 
     // SSE 帧可能跨 chunk 到达，必须用 buffer 累积再切分
@@ -92,6 +97,14 @@ export class SseHttpUtil {
           if (frame.done === true) {
             doneFired = true
 
+            monitor.addFrame(rec, 'done', jsonStr)
+            if (frame.card) {
+              monitor.setCard(rec, JSON.stringify(frame.card, null, 2))
+            }
+            if (frame.error) {
+              monitor.noteError(rec, frame.error)
+            }
+
             callbacks.onDone({
               sessionId: frame.sessionId,
               messageId: frame.messageId,
@@ -99,15 +112,20 @@ export class SseHttpUtil {
               card: frame.card
             })
           } else if (frame.chunk !== undefined) {
+            monitor.addFrame(rec, 'chunk', jsonStr)
+            monitor.appendText(rec, frame.chunk)
             callbacks.onChunk(frame.chunk)
           }
         } catch (e) {
+          monitor.addFrame(rec, 'raw', jsonStr)
           LogUtil.e('SseHttpUtil', 'parse frame failed: ' + jsonStr)
         }
       }
     })
 
     req.on('dataEnd', () => {
+      monitor.endStream(rec)
+
       // 兜底：如果服务端没发结束帧就断了，也触发一次 onDone
       if (!doneFired) {
         callbacks.onDone({})
@@ -129,7 +147,10 @@ export class SseHttpUtil {
         connectTimeout: 10000,
         readTimeout: 60000
       }
-    ).catch((err: Error) => {
+    ).then((code: number) => {
+      monitor.onSseStatus(rec, code)
+    }).catch((err: Error) => {
+      monitor.fail(rec, JSON.stringify(err))
       callbacks.onError(JSON.stringify(err))
 
       try {
