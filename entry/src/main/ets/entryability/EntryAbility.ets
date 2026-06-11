@@ -1,9 +1,9 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, ConfigurationConstant, UIAbility, Want, Configuration } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { HMRouterMgr } from '@hadss/hmrouter'
 import { SameRouteInterceptor } from '../interceptors/SameRouteInterceptor'
-import { WindowUtil } from 'common'
+import { WindowUtil, getThemeState } from 'common'
 import { ChatRdb } from 'chat';
 
 const DOMAIN = 0x0000;
@@ -26,7 +26,25 @@ export default class EntryAbility extends UIAbility {
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
+    // 冷启动：读系统当前深浅色同步到全局主题（手机已是暗色时，首屏就跟着暗）
+    this.syncTheme(this.context.config.colorMode);
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  /**
+   * 系统深浅色（及其他配置）变化时回调。
+   * 把系统 colorMode 同步到全局 ThemeState.isDark，
+   * @Trace 驱动所有 this.theme.xxx 组件重渲，实现暗色跟随系统。
+   */
+  onConfigurationUpdate(newConfig: Configuration): void {
+    this.syncTheme(newConfig.colorMode);
+  }
+
+  /** 把系统 colorMode 映射成 ThemeState.isDark（undefined / 非暗色都按亮色处理） */
+  private syncTheme(colorMode?: ConfigurationConstant.ColorMode): void {
+    const isDark = colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    getThemeState().isDark = isDark;
+    hilog.info(DOMAIN, 'EntryAbility', 'syncTheme isDark=%{public}s', isDark + '');
   }
 
   onDestroy(): void {

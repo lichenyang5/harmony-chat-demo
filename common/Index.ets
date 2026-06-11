@@ -14,3 +14,7 @@ export { ApiResponse } from './src/main/ets/models/commonModel'
 
 // === 全局主题 ===
 export { ThemeState, getThemeState } from './src/main/ets/viewmodel/ThemeState'
+
+// === 网络调试（debug 包专用，类似 DevTools Network 面板） ===
+export { getNetMonitor, NetMonitorState, NetRecord, NetFrame } from './src/main/ets/debug/NetMonitor'
+export { NetMonitorOverlay } from './src/main/ets/debug/NetMonitorPanel'

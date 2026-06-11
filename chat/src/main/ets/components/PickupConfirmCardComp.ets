@@ -1,5 +1,6 @@
 import { PickupCard, PickupPoint } from '../models/chatModel'
 import { PathShape } from '@kit.ArkUI'
+import { ThemeState, getThemeState } from 'common'
 
 /**
  * 确认上车点卡片（票根风格 — 数据驱动版）
@@ -17,6 +18,7 @@ import { PathShape } from '@kit.ArkUI'
 export struct PickupConfirmCardComp {
   @Param @Require card: PickupCard
 
+  @Local theme: ThemeState = getThemeState()
   @Local cardWidth: number = 0     // px
   @Local cardHeight: number = 0    // px
   @Local notchY: number = 0        // 缺口中心 y, px
@@ -71,7 +73,7 @@ export struct PickupConfirmCardComp {
           .height(0)
           .border({
             width: { top: 1 },
-            color: '#1A000000',
+            color: this.theme.ticketLine,
             style: BorderStyle.Dashed
           })
 
@@ -92,14 +94,14 @@ export struct PickupConfirmCardComp {
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-        .backgroundColor(Color.White)
+        .backgroundColor(this.theme.ticketSurface)
       }
       .width('100%')
-      .backgroundColor(Color.White)
+      .backgroundColor(this.theme.ticketSurface)
       .clipShape(new PathShape({ commands: this.getCardPath() }))
       .shadow({
         radius: 14,
-        color: '#22000000',
+        color: this.theme.ticketShadow,
         offsetX: 0,
         offsetY: 6
       })
@@ -120,10 +122,10 @@ export struct PickupConfirmCardComp {
       Column()
         .width('100%')
         .height(this.headerH)
-        .backgroundColor('#FF00B5D9')
+        .backgroundColor(this.theme.ticketBrand)
         .linearGradient({
           angle: 90,
-          colors: [['#FFFFFFFF', 0.0], ['#00FFFFFF', 1.0]]
+          colors: [[this.theme.ticketGradOpaque, 0.0], [this.theme.ticketGradClear, 1.0]]
         })
 
       // 内容层 + 纵向半透白→白
@@ -133,14 +135,14 @@ export struct PickupConfirmCardComp {
           Row()
             .width(100)
             .height(8)
-            .backgroundColor('#FFD91A')
+            .backgroundColor(this.theme.ticketYellow)
             .borderRadius(4)
 
           Text(this.card.title)
             .fontSize(20)
             .lineHeight(24)
             .fontWeight(FontWeight.Bold)
-            .fontColor('#E6000000')
+            .fontColor(this.theme.ticketTextHeavy)
         }
 
         this.RouteRow()
@@ -150,7 +152,7 @@ export struct PickupConfirmCardComp {
       .padding({ left: 16, right: 16, top: 16, bottom: 16 })
       .linearGradient({
         angle: 180,
-        colors: [['#B3FFFFFF', 0.0], ['#FFFFFFFF', 1.0]]
+        colors: [[this.theme.ticketGradVTop, 0.0], [this.theme.ticketGradOpaque, 1.0]]
       })
       .onAreaChange((_o: Area, n: Area) => {
         this.headerH = Number(n.height)
@@ -168,12 +170,12 @@ export struct PickupConfirmCardComp {
       Column() {
         Text('?')
           .fontSize(8)
-          .fontColor('#FFFFFF')
+          .fontColor(this.theme.ticketOnBrand)
           .textAlign(TextAlign.Center)
           .width(12)
           .height(12)
           .lineHeight(12)
-          .backgroundColor('#E6000000')
+          .backgroundColor(this.theme.ticketTextHeavy)
           .borderRadius(256)
           .margin({ top: 2 })
 
@@ -182,7 +184,7 @@ export struct PickupConfirmCardComp {
         //   .height(18)
         //   .startPoint([6, 0])
         //   .endPoint([6, 18])
-        //   .stroke('#B5BAC4')
+        //   .stroke(this.theme.ticketDash)
         //   .strokeWidth(1)
         //   .strokeDashArray([2, 2])
         // 6段
@@ -192,7 +194,7 @@ export struct PickupConfirmCardComp {
           .height(18)
           .startPoint([6, 0])
           .endPoint([6, 18])
-          .stroke('#B5BAC4')
+          .stroke(this.theme.ticketDash)
           .strokeWidth(1)
           .strokeDashArray([4, 3])
         //   三段
@@ -210,7 +212,7 @@ export struct PickupConfirmCardComp {
         Text(this.card.question)
           .fontSize(12)
           .lineHeight(16)
-          .fontColor('#E6000000')
+          .fontColor(this.theme.ticketTextHeavy)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -218,7 +220,7 @@ export struct PickupConfirmCardComp {
         Text(this.card.currentLocation)
           .fontSize(12)
           .lineHeight(16)
-          .fontColor('#66000000')
+          .fontColor(this.theme.ticketTextMuted)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .margin({top:14})
@@ -236,10 +238,10 @@ export struct PickupConfirmCardComp {
   @Builder
   IndexBadge(num: string) {
     Stack() {
-      Circle({ width: 16, height: 16 }).fill('#FF00B5D9')
+      Circle({ width: 16, height: 16 }).fill(this.theme.ticketBrand)
       Text(num)
         .fontSize(10)
-        .fontColor('#FFFFFF')
+        .fontColor(this.theme.ticketOnBrand)
         .fontWeight(FontWeight.Bold)
     }
     .width(16)
@@ -252,7 +254,7 @@ export struct PickupConfirmCardComp {
     Row()
       .width('100%')
       .height(0.5)
-      .backgroundColor('#1A000000')
+      .backgroundColor(this.theme.ticketLine)
   }
 
   // ────── @Builder：第 1 项 POI（完整，带进站口 + 三横线菜单） ──────
@@ -267,7 +269,7 @@ export struct PickupConfirmCardComp {
           .margin({ left: 4 })
           .fontSize(14)
           .lineHeight(18)
-          .fontColor('#E6000000')
+          .fontColor(this.theme.ticketTextHeavy)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -276,7 +278,7 @@ export struct PickupConfirmCardComp {
         Text(this.card.points[index].distance)
           .fontSize(10)
           .lineHeight(12)
-          .fontColor('#99000000')
+          .fontColor(this.theme.ticketTextLite)
           .margin({ left: 4 })
       }
       .width('100%')
@@ -285,7 +287,7 @@ export struct PickupConfirmCardComp {
       Text(this.card.points[index].address)
         .fontSize(12)
         .lineHeight(16)
-        .fontColor('#99000000')
+        .fontColor(this.theme.ticketTextLite)
         .width('100%')
 
       // 进站口 chip + 三横线菜单
@@ -293,14 +295,14 @@ export struct PickupConfirmCardComp {
         Text(this.card.points[index].entrance)
           .fontSize(12)
           .lineHeight(16)
-          .fontColor('#E6000000')
+          .fontColor(this.theme.ticketTextHeavy)
           .fontWeight(FontWeight.Regular)
           .layoutWeight(1)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .textAlign(TextAlign.Center)
           .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .border({ width: 1, color: '#1A000000', radius: 8 })
+          .border({ width: 1, color: this.theme.ticketLine, radius: 8 })
 
         Column() {
           Image($r('app.media.list'))
@@ -310,7 +312,7 @@ export struct PickupConfirmCardComp {
             .draggable(false)
         }
         .padding(7)
-        .border({ width: 1, color: '#1A000000', radius: 8 })
+        .border({ width: 1, color: this.theme.ticketLine, radius: 8 })
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .margin({left:4})
@@ -335,7 +337,7 @@ export struct PickupConfirmCardComp {
           .margin({ left: 4 })
           .fontSize(14)
           .lineHeight(18)
-          .fontColor('#E6000000')
+          .fontColor(this.theme.ticketTextHeavy)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -344,7 +346,7 @@ export struct PickupConfirmCardComp {
         Text(this.card.points[index].distance)
           .fontSize(10)
           .lineHeight(12)
-          .fontColor('#99000000')
+          .fontColor(this.theme.ticketTextLite)
           .margin({ left: 4 })
       }
       .width('100%')
@@ -353,7 +355,7 @@ export struct PickupConfirmCardComp {
       Text(this.card.points[index].address)
         .fontSize(12)
         .lineHeight(16)
-        .fontColor('#99000000')
+        .fontColor(this.theme.ticketTextLite)
         .width('100%')
     }
     .width('100%')
@@ -368,12 +370,12 @@ export struct PickupConfirmCardComp {
         .fontSize(12)
         .lineHeight(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#FF00B5D9')
+        .fontColor(this.theme.ticketBrand)
     }
     .justifyContent(FlexAlign.Center)
     .width('100%')
     .padding({ top: 10, bottom: 10 })
-    .backgroundColor('#1A00B5D9')
+    .backgroundColor(this.theme.ticketBrandThin)
     .borderRadius(8)
   }
 }

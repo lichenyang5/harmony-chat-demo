@@ -1,10 +1,12 @@
 import { TripCard } from '../models/chatModel'
 import { PathShape } from '@kit.ArkUI'
+import { ThemeState, getThemeState } from 'common'
 
 @ComponentV2
 export struct ConfirmTripCardComp {
   @Param @Require card: TripCard
 
+  @Local theme: ThemeState = getThemeState()
   @Local cardWidth: number = 0     // px
   @Local cardHeight: number = 0    // px
   @Local notchY: number = 0        // 缺口中心 y, px
@@ -53,13 +55,13 @@ export struct ConfirmTripCardComp {
           .height(0)
           .border({
             width: { top: 1 },
-            color: '#1A000000',
+            color: this.theme.ticketLine,
             style: BorderStyle.Dashed
           })
 
         // ============ 白色区 ============
         Column() {
-          Image($rawfile('images/1.png'))
+          Image($r('app.media.1'))
             .width('100%')
             .height(188)
             .borderRadius(8)
@@ -69,7 +71,7 @@ export struct ConfirmTripCardComp {
               Text(this.card.priceRange)
                 .fontSize(14)
                 .lineHeight(18)
-                .fontColor('#E6000000')
+                .fontColor(this.theme.ticketTextHeavy)
                 .fontWeight(FontWeight.Medium)
                 .width('100%')
                 .textAlign(TextAlign.Start)
@@ -77,7 +79,7 @@ export struct ConfirmTripCardComp {
               Text(this.card.selectedHint)
                 .fontSize(12)
                 .lineHeight(16)
-                .fontColor('#99000000')
+                .fontColor(this.theme.ticketTextLite)
                 .width('100%')
                 .textAlign(TextAlign.Start)
             }
@@ -87,8 +89,8 @@ export struct ConfirmTripCardComp {
             Text(this.card.selectCarText)
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#FF00B5D9')
-              .backgroundColor('#1A00B5D9')
+              .fontColor(this.theme.ticketBrand)
+              .backgroundColor(this.theme.ticketBrandThin)
               .borderRadius(8)
               .padding({ left: 16, right: 16, top: 8, bottom: 8 })
           }
@@ -98,26 +100,26 @@ export struct ConfirmTripCardComp {
           Text(this.card.confirmText)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#FFFFFF')
+            .fontColor(this.theme.ticketOnBrand)
             .textAlign(TextAlign.Center)
             .width('100%')
             .padding({ top: 12, bottom: 12 })
-            .backgroundColor('#FF00B5D9')
+            .backgroundColor(this.theme.ticketBrand)
             .borderRadius(8)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
         .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-        .backgroundColor(Color.White)
+        .backgroundColor(this.theme.ticketSurface)
       }
       .width('100%')
-      .backgroundColor(Color.White)
+      .backgroundColor(this.theme.ticketSurface)
       // 关键 1：先裁形状
       .clipShape(new PathShape({ commands: this.getCardPath() }))
       // 关键 2：后加阴影 → 沿凹陷轮廓自动外发光
       .shadow({
         radius: 14,
-        color: '#22000000',
+        color: this.theme.ticketShadow,
         offsetX: 0,
         offsetY: 6
       })
@@ -138,10 +140,10 @@ export struct ConfirmTripCardComp {
       Column()
         .width('100%')
         .height(this.headerH)
-        .backgroundColor('#FF00B5D9')
+        .backgroundColor(this.theme.ticketBrand)
         .linearGradient({
           angle: 90,
-          colors: [['#FFFFFFFF', 0.0], ['#00FFFFFF', 1.0]]
+          colors: [[this.theme.ticketGradOpaque, 0.0], [this.theme.ticketGradClear, 1.0]]
         })
 
       // 内容层 + 纵向半透明白→白
@@ -151,14 +153,14 @@ export struct ConfirmTripCardComp {
           Row()
             .width(84)
             .height(8)
-            .backgroundColor('#FFD91A')
+            .backgroundColor(this.theme.ticketYellow)
             .borderRadius(4)
 
           Text(this.card.title)
             .fontSize(20)
             .lineHeight(24)
             .fontWeight(FontWeight.Bold)
-            .fontColor('#E6000000')
+            .fontColor(this.theme.ticketTextHeavy)
         }
 
         Column() {
@@ -169,14 +171,14 @@ export struct ConfirmTripCardComp {
               Text(this.card.startLocation)
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#E6000000')
+                .fontColor(this.theme.ticketTextHeavy)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               Image($r('app.media.right')).width(6).height(12)
             }
             .layoutWeight(1)
             Text(this.card.startTag)
-              .fontSize(10).lineHeight(12).fontColor('#99000000')
+              .fontSize(10).lineHeight(12).fontColor(this.theme.ticketTextLite)
           }
           .width('100%').alignItems(VerticalAlign.Center)
 
@@ -186,7 +188,7 @@ export struct ConfirmTripCardComp {
               Line()
                 .width(1).height(32)
                 .startPoint([0, 0]).endPoint([0, 32])
-                .stroke('#B5BAC4').strokeWidth(1)
+                .stroke(this.theme.ticketDash).strokeWidth(1)
                 .strokeDashArray([2, 2])
             }
             .width(12).margin({ right: 8 })
@@ -194,14 +196,14 @@ export struct ConfirmTripCardComp {
 
             Image($r('app.media.jiange')).width(12).height(12)
             Text(this.card.distance)
-              .fontSize(10).lineHeight(12).fontColor('#99000000')
+              .fontSize(10).lineHeight(12).fontColor(this.theme.ticketTextLite)
               .margin({ left: 4 })
 
             Blank()
 
             Image($r('app.media.time')).width(12).height(12)
             Text(this.card.duration)
-              .fontSize(10).lineHeight(12).fontColor('#66000000')
+              .fontSize(10).lineHeight(12).fontColor(this.theme.ticketTextMuted)
               .margin({ left: 4 })
           }
           .width('100%').alignItems(VerticalAlign.Center)
@@ -213,14 +215,14 @@ export struct ConfirmTripCardComp {
               Text(this.card.endLocation)
                 .fontSize(14)
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#E6000000')
+                .fontColor(this.theme.ticketTextHeavy)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               Image($r('app.media.right')).width(6).height(12)
             }
             .layoutWeight(1)
             Text(this.card.arriveTime)
-              .fontSize(10).lineHeight(12).fontColor('#66000000')
+              .fontSize(10).lineHeight(12).fontColor(this.theme.ticketTextMuted)
           }
           .width('100%').alignItems(VerticalAlign.Center)
         }
@@ -231,7 +233,7 @@ export struct ConfirmTripCardComp {
       .padding({ left: 16, right: 16, top: 16, bottom: 20 })
       .linearGradient({
         angle: 180,
-        colors: [['#B3FFFFFF', 0.0], ['#FFFFFFFF', 1.0]]
+        colors: [[this.theme.ticketGradVTop, 0.0], [this.theme.ticketGradOpaque, 1.0]]
       })
       // 关键 4：测抬头高 → 缺口中线就贴在抬头底边
       .onAreaChange((_o: Area, n: Area) => {
