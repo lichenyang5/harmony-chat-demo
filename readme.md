@@ -895,6 +895,9 @@ data: {"done":true,"card":{"type":"pickup_confirm"}}
 * [硬编码颜色迁移到主题系统](./docs/25-arkts-hardcoded-colors-into-theme-system.md)
 * [RDB 聊天记录持久化](./docs/25-arkts-rdb-chat-persistence.md)
 * [应用内 Network 调试面板](./docs/26-in-app-network-monitor-sse-devtools.md)
+* [消息状态机：从 boolean 到 enum](./docs/27-arkts-message-status-state-machine.md)
+* [失败重发 / AI 重新生成 / 幂等防重](./docs/28-arkts-resend-regenerate-idempotency.md)
+* [消息状态入库与历史还原](./docs/29-arkts-message-status-rdb-persistence.md)
 
 ---
 
