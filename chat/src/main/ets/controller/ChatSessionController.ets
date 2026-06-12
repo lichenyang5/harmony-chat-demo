@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit'
 import { LogUtil } from 'common'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatSession, ChatMessage, ChatMessagePlain } from '../models/chatModel'
+import { ChatRole } from '../constants/ChatConstants'
 import { ChatRdb } from '../utils/ChatRdb'
 
 /**
@@ -15,9 +16,10 @@ import { ChatRdb } from '../utils/ChatRdb'
  * - 持久化当前会话
  *
  * 核心转换逻辑（ChatMessage ↔ ChatMessagePlain）：
- * - 存储用 ChatMessagePlain（普通对象，JSON.stringify 可序列化）
+ * - 存储用 ChatMessagePlain（普通对象，可序列化 / RDB 列读写）
  * - UI 用 ChatMessage（@ObservedV2 / @Trace，驱动气泡实时更新）
- * - 两者之间的转换由 convertToObservable / convertToPlain 私有方法负责
+ * - 两者之间的转换下沉到模型自身：ChatMessage.fromPlain / toPlain
+ *   （含空值防御 + 中途态归一化），Controller 只负责调度，不再手写映射
  */
 export class ChatSessionController {
   private vm: ChatViewModel
@@ -54,7 +56,8 @@ export class ChatSessionController {
       return false
     }
 
-    this.vm.historyMessage = this.convertToObservable(sourceMessages, id)
+    this.vm.historyMessage = sourceMessages.map((plain: ChatMessagePlain, i: number) =>
+      ChatMessage.fromPlain(plain, id, i))
     this.vm.sessionId = id
     this.vm.inputContent = ''
     this.vm.isLoading = false
@@ -70,7 +73,8 @@ export class ChatSessionController {
     const sessionId = session.id ? session.id : Date.now().toString()
     const sourceMessages: ChatMessagePlain[] = session.messages ? session.messages : []
 
-    this.vm.historyMessage = this.convertToObservable(sourceMessages, sessionId)
+    this.vm.historyMessage = sourceMessages.map((plain: ChatMessagePlain, i: number) =>
+      ChatMessage.fromPlain(plain, sessionId, i))
     this.vm.sessionId = sessionId
     this.vm.inputContent = ''
     this.vm.isLoading = false
@@ -100,53 +104,14 @@ export class ChatSessionController {
       return
     }
 
-    const plainMessages = this.convertToPlain()
+    const plainMessages: ChatMessagePlain[] = this.vm.historyMessage.map(
+      (m: ChatMessage, i: number) => m.toPlain(this.vm.sessionId, i))
     if (plainMessages.length === 0) {
       return
     }
 
     const session = this.buildSession(plainMessages)
     await ChatRdb.saveSession(session)
-  }
-
-  /**
-   * 将 ChatMessage（@ObservedV2）数组转为 ChatMessagePlain 普通对象数组，用于持久化。
-   * 每个字段均做空值防御，避免 @Trace 字段序列化时出现 undefined。
-   */
-  private convertToPlain(): ChatMessagePlain[] {
-    return this.vm.historyMessage.map((source: ChatMessage, i: number) => {
-      const plain = new ChatMessagePlain()
-      plain.id = source.id ? source.id : `${this.vm.sessionId}_${i}`
-      plain.role = source.role ? source.role : 'assistant'
-      plain.content = source.content ? source.content : ''
-      plain.createTime = source.createTime ? source.createTime : Date.now()
-      plain.sessionId = source.sessionId ? source.sessionId : this.vm.sessionId
-      // 卡片：PickupCard 是普通类，可直接序列化
-      plain.card = source.card ? source.card : null
-      return plain
-    })
-  }
-
-  /**
-   * 将 ChatMessagePlain 普通对象数组恢复为 ChatMessage（@ObservedV2）数组，用于 UI 展示。
-   * 每个字段均做空值防御，fallback 到合理默认值。
-   *
-   * @param plains 持久化存储中读出的消息列表
-   * @param sessionId 所属会话 ID，用于生成 fallback 消息 ID
-   */
-  private convertToObservable(plains: ChatMessagePlain[], sessionId: string): ChatMessage[] {
-    return plains.map((plain: ChatMessagePlain, i: number) => {
-      const msg = new ChatMessage()
-      msg.id = plain.id ? plain.id : `${sessionId}_${i}`
-      msg.role = plain.role ? plain.role : 'assistant'
-      msg.content = plain.content ? plain.content : ''
-      msg.createTime = plain.createTime ? plain.createTime : Date.now()
-      msg.sessionId = plain.sessionId ? plain.sessionId : sessionId
-      // 卡片：JSON.parse 出来的 plain.card 是普通对象，字段与 PickupCard 一致，
-      // 直接赋值即可（PickupCard 上无方法，无需重建实例）
-      msg.card = plain.card ? plain.card : null
-      return msg
-    })
   }
 
   /**
@@ -157,7 +122,7 @@ export class ChatSessionController {
    * - createTime / updateTime：分别来自第一/最后一条消息的时间戳
    */
   private buildSession(plainMessages: ChatMessagePlain[]): ChatSession {
-    const firstUser = plainMessages.find((m: ChatMessagePlain) => m.role === 'user')
+    const firstUser = plainMessages.find((m: ChatMessagePlain) => m.role === ChatRole.USER)
     const firstContent = firstUser && firstUser.content ? firstUser.content : ''
     const title = firstContent.length > 0
       ? firstContent.substring(0, 20) + (firstContent.length > 20 ? '...' : '')

@@ -163,7 +163,7 @@ export struct ChatTabComp {
       .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
       // ── 消息列表 ────────────────────────────────────────────────────
-      ChatListComp({ vm: this.vm })
+      ChatListComp({ vm: this.vm, controller: this.controller })
         .layoutWeight(1)
 
       // ── 输入框组件（发送/停止回调直接调用 controller）──────────────
