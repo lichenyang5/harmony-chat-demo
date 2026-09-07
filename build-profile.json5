@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "C:\\Users\\30829\\.ohos\\config\\default_MyApplication_ITFR-PFTw1V6StiPUXpdsbLDzHIIk8LHEEDcTccgm2c=.cer",
+          "certpath": "C:\\Users\\30829\\.ohos\\config\\default_harmony-chat-demo_nozfmd3zMlr8um-IQ4FfwvN6V32N_KMeeWGyQH8Q2L4=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B626256F600B6DA43D8460CF6B678183CD082C70668AAB69A5E2AF55233C76E49647D14B7ADA908",
-          "profile": "C:\\Users\\30829\\.ohos\\config\\default_MyApplication_ITFR-PFTw1V6StiPUXpdsbLDzHIIk8LHEEDcTccgm2c=.p7b",
+          "keyPassword": "0000001B0AEE91AAACB0DB0339AC7C141E916BD3192C82833156632377B76507A45177A45EA014D57F0137",
+          "profile": "C:\\Users\\30829\\.ohos\\config\\default_harmony-chat-demo_nozfmd3zMlr8um-IQ4FfwvN6V32N_KMeeWGyQH8Q2L4=.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\30829\\.ohos\\config\\default_MyApplication_ITFR-PFTw1V6StiPUXpdsbLDzHIIk8LHEEDcTccgm2c=.p12",
-          "storePassword": "0000001BD8708048B1C4094D26800F7B6807DA2A4A9DD41A5D34F8FFF22FE0A745F8D3B8A467EACD6E67D9"
+          "storeFile": "C:\\Users\\30829\\.ohos\\config\\default_harmony-chat-demo_nozfmd3zMlr8um-IQ4FfwvN6V32N_KMeeWGyQH8Q2L4=.p12",
+          "storePassword": "0000001B70E97A3B7A2DCBBC4971600D80A49002C20F5B6E42DD51410DAAD8567ACB8E18D9D8EFEF86DA90"
         }
       }
     ],
