@@ -5,13 +5,13 @@ import { ChatSessionController } from '../controller/ChatSessionController'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
-import { WindowUtil, ThemeState, getThemeState, KeyboardController } from 'common'
-import { ChatLoadState, getChatLoadState } from '../viewmodel/ChatLoadState'
+import { ChatHistoryDrawerComp } from './ChatHistoryDrawerComp'
+import { WindowUtil, ThemeState, getThemeState, KeyboardController, LogUtil } from 'common'
 
 /**
  * 聊天 Tab 组件（嵌入 HomePage 的 Tab 容器中）。
  *
- * 职责：纯 UI 渲染（消息列表、输入框、顶部栏）和状态监听。
+ * 职责：聊天总容器、历史抽屉开关、消息列表、输入框和状态监听。
  * 会话管理逻辑委托给 ChatSessionController，
  * 消息收发逻辑委托给 ChatController，
  * 键盘监听委托给 KeyboardController。
@@ -27,12 +27,11 @@ export struct ChatTabComp {
   /** 全局主题（亮色/暗黑）*/
   @Local theme: ThemeState = getThemeState()
 
-  /**
-   * 跨页面加载信号：
-   * ChatHistoryPage 点击某条会话时设置 pendingSessionId，
-   * 本组件通过 @Monitor 监听并加载对应会话。
-   */
-  @Local chatLoadState: ChatLoadState = getChatLoadState()
+  /** 右侧历史会话抽屉是否打开 */
+  @Local historyDrawerVisible: boolean = false
+
+  /** 会话加载或持久化是否仍在进行，用于串行化会话级操作 */
+  @Local sessionOperationPending: boolean = false
 
   /** 消息收发控制器 */
   @Local controller: ChatController = new ChatController(this.vm)
@@ -52,7 +51,8 @@ export struct ChatTabComp {
     // 禁用系统默认的键盘顶起模式，改用手动 padding 控制
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.NONE)
-    } catch (_) {
+    } catch (error) {
+      LogUtil.e('ChatTabComp', 'set keyboard avoid mode failed: ' + JSON.stringify(error))
     }
 
     // 启动键盘监听；收到高度变化时执行动画更新 padding
@@ -65,39 +65,17 @@ export struct ChatTabComp {
         }
       )
     })
-
-    // 若 App 刚启动时已有待加载会话（冷启动场景），立即加载
-    if (this.chatLoadState.pendingSessionId) {
-      this.sessionController.loadSessionById(this.chatLoadState.pendingSessionId, ctx)
-      this.chatLoadState.pendingSessionId = ''
-    }
   }
 
   aboutToDisappear(): void {
     // 恢复系统默认键盘模式，释放键盘监听资源
     try {
       this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
-    } catch (_) {
+    } catch (error) {
+      LogUtil.e('ChatTabComp', 'restore keyboard avoid mode failed: ' + JSON.stringify(error))
     }
 
     this.keyboardController.dispose()
-  }
-
-  // ─── @Monitor 监听 ─────────────────────────────────────────────────────────
-
-  /**
-   * 监听跨页面信号：
-   * 从 ChatHistoryPage 点某条历史会话回到 HomePage 时，
-   * pendingSessionId 被设置，此处响应并加载对应会话。
-   */
-  @Monitor('chatLoadState.pendingSessionId')
-  onPendingSessionChange(): void {
-    const id = this.chatLoadState.pendingSessionId
-    if (id) {
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-      this.sessionController.loadSessionById(id, ctx)
-      this.chatLoadState.pendingSessionId = ''
-    }
   }
 
   /**
@@ -110,86 +88,206 @@ export struct ChatTabComp {
       return
     }
     // 流式结束，将会话写入 RDB
-    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-    this.sessionController.persistSession(ctx)
+    this.persistCurrentSession()
   }
 
-  /**
-   * 监听"会话被删除"信号：
-   * ChatHistoryPage 左滑删除后，若被删的就是当前正在显示的会话，
-   * 直接重置 UI 成新会话，避免用户看到一份"鬼数据"。
-   * 消费完信号必须清零，否则下次删同一 id 时 @Trace 值没变不会再触发。
-   */
-  @Monitor('chatLoadState.deletedSessionId')
-  onDeletedSessionChange(): void {
-    const deletedId = this.chatLoadState.deletedSessionId
-    if (!deletedId) {
+  private async persistCurrentSession(): Promise<void> {
+    this.sessionOperationPending = true
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+      await this.sessionController.persistSession(ctx)
+    } finally {
+      this.sessionOperationPending = false
+    }
+  }
+
+  private showGeneratingHint(): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: 'AI 正在生成回复，请先停止或等待完成',
+        duration: 1800
+      })
+    } catch (error) {
+      LogUtil.e('ChatTabComp', 'show generating hint failed: ' + JSON.stringify(error))
+    }
+  }
+
+  private openHistoryDrawer(): void {
+    if (this.sessionOperationPending) {
+      this.showOperationPendingHint()
       return
     }
-    if (this.vm.sessionId === deletedId) {
-      // 直接调 vm.resetForNewSession 而不是 controller.newSession，
-      // 后者会因 isLoading 拒绝重置；既然会话已删，不再保护流式
-      this.vm.resetForNewSession()
+    try {
+      this.getUIContext().getFocusController().clearFocus()
+    } catch (error) {
+      LogUtil.e('ChatTabComp', 'clear input focus failed: ' + JSON.stringify(error))
     }
-    this.chatLoadState.deletedSessionId = ''
+
+    this.getUIContext().animateTo({ duration: 260, curve: Curve.EaseOut }, () => {
+      this.historyDrawerVisible = true
+    })
+  }
+
+  private closeHistoryDrawer(): void {
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseIn }, () => {
+      this.historyDrawerVisible = false
+    })
+  }
+
+  private requestNewSession(): void {
+    if (this.sessionOperationPending) {
+      this.showOperationPendingHint()
+      return
+    }
+    if (!this.sessionController.newSession()) {
+      this.showGeneratingHint()
+      return
+    }
+    this.closeHistoryDrawer()
+  }
+
+  private async selectHistorySession(sessionId: string): Promise<void> {
+    if (this.vm.isLoading) {
+      this.showGeneratingHint()
+      return
+    }
+    if (this.sessionOperationPending) {
+      this.showOperationPendingHint()
+      return
+    }
+
+    this.sessionOperationPending = true
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+      const loaded = await this.sessionController.loadSessionById(sessionId, ctx)
+      if (!loaded) {
+        try {
+          this.getUIContext().getPromptAction().showToast({
+            message: '该会话已不存在，请刷新后重试',
+            duration: 1600
+          })
+        } catch (error) {
+          LogUtil.e('ChatTabComp', 'show load failure hint failed: ' + JSON.stringify(error))
+        }
+        return
+      }
+      this.closeHistoryDrawer()
+    } finally {
+      this.sessionOperationPending = false
+    }
+  }
+
+  private showOperationPendingHint(): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({
+        message: '正在保存或加载会话，请稍候',
+        duration: 1500
+      })
+    } catch (error) {
+      LogUtil.e('ChatTabComp', 'show operation hint failed: ' + JSON.stringify(error))
+    }
+  }
+
+  private onHistorySessionDeleted(sessionId: string): void {
+    if (sessionId === this.vm.sessionId) {
+      this.sessionController.newSession()
+    }
   }
 
   // ─── UI ───────────────────────────────────────────────────────────────────
 
   build() {
-    Column() {
-      // ── 顶部栏：标题 + 新建会话按钮 ──────────────────────────────────
-      Row() {
-        Text('AI 助手')
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.theme.textPrimary)
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column() {
+        Row() {
+          Text('AI 助手')
+            .fontSize(18)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.theme.textPrimary)
 
-        Blank()
+          Blank()
 
-        Text('+ 新会话')
-          .fontSize(14)
-          // 生成中时置灰，防止打断流式请求
-          .fontColor(this.vm.isLoading ? this.theme.textTertiary : this.theme.primary)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .onClick(() => {
-            this.sessionController.newSession()
-          })
+          Text('+ 新会话')
+            .fontSize(14)
+            .fontColor(this.vm.isLoading ? this.theme.textTertiary : this.theme.primary)
+            .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+            .onClick(() => {
+              this.requestNewSession()
+            })
+
+          Text('历史会话')
+            .fontSize(14)
+            .fontColor(this.theme.textPrimary)
+            .padding({ left: 10, right: 4, top: 8, bottom: 8 })
+            .onClick(() => {
+              this.openHistoryDrawer()
+            })
+        }
+        .width('100%')
+        .height(56)
+        .padding({ left: 20, right: 12 })
+        .backgroundColor(this.theme.surface)
+        .border({ width: { bottom: 0.5 }, color: this.theme.divider })
+
+        ChatListComp({ vm: this.vm, controller: this.controller })
+          .layoutWeight(1)
+
+        ChatInputComp({
+          inputContent: this.vm.inputContent,
+          isGenerating: this.vm.isLoading,
+          onInputChange: (val: string) => {
+            this.vm.inputContent = val
+          },
+          onSend: () => {
+            this.controller.sendMessage()
+          },
+          onStop: () => {
+            this.controller.stopGeneration()
+          }
+        })
       }
       .width('100%')
-      .height(56)
-      .padding({ left: 20, right: 16 })
-      .backgroundColor(this.theme.surface)
-      .border({ width: { bottom: 0.5 }, color: this.theme.divider })
-
-      // ── 消息列表 ────────────────────────────────────────────────────
-      ChatListComp({ vm: this.vm, controller: this.controller })
-        .layoutWeight(1)
-
-      // ── 输入框组件（发送/停止回调直接调用 controller）──────────────
-      ChatInputComp({
-        inputContent: this.vm.inputContent,
-        isGenerating: this.vm.isLoading,
-        onInputChange: (val: string) => {
-          this.vm.inputContent = val
-        },
-        onSend: () => {
-          this.controller.sendMessage()
-        },
-        onStop: () => {
-          this.controller.stopGeneration()
-        }
+      .height('100%')
+      .backgroundColor(this.theme.bg)
+      .padding({
+        bottom: this.keyboardHeight > 0
+          ? Math.max(0, this.keyboardHeight - 56 - WindowUtil.getBottomAvoidHeight())
+          : 0
       })
+      .expandSafeArea([SafeAreaType.KEYBOARD], [SafeAreaEdge.BOTTOM])
+
+      if (this.historyDrawerVisible) {
+        ChatHistoryDrawerComp({
+          visible: true,
+          isGenerating: this.vm.isLoading,
+          operationPending: this.sessionOperationPending,
+          currentSessionId: this.vm.sessionId,
+          onClose: () => {
+            this.closeHistoryDrawer()
+          },
+          onSelectSession: (sessionId: string) => {
+            return this.selectHistorySession(sessionId)
+          },
+          onNewSession: () => {
+            this.requestNewSession()
+          },
+          onSessionDeleted: (sessionId: string) => {
+            this.onHistorySessionDeleted(sessionId)
+          },
+          onOperationStateChange: (pending: boolean) => {
+            this.sessionOperationPending = pending
+          }
+        })
+          .zIndex(10)
+          .transition(
+            TransitionEffect.move(TransitionEdge.END)
+              .combine(TransitionEffect.OPACITY)
+              .animation({ duration: 240, curve: Curve.EaseOut })
+          )
+      }
     }
     .width('100%')
     .height('100%')
     .backgroundColor(this.theme.bg)
-    // 键盘弹出时，通过 padding 上移输入框，避免被遮挡
-    .padding({
-      bottom: this.keyboardHeight > 0
-        ? Math.max(0, this.keyboardHeight - 56 - WindowUtil.getBottomAvoidHeight())
-        : 0
-    })
-    .expandSafeArea([SafeAreaType.KEYBOARD], [SafeAreaEdge.BOTTOM])
   }
 }

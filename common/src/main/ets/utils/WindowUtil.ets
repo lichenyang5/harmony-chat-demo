@@ -11,7 +11,7 @@ import { LogUtil } from './LogUtil'
  * 使用方式：
  *   1. EntryAbility.onWindowStageCreate 调用 WindowUtil.init(lastWindow)
  *   2. 组件中调用 WindowUtil.getBottomAvoidHeight() 获取底部避让高度
- *   3. 键盘监听放到具体组件里（见 ChatTabComp / ChatPage）
+ *   3. 键盘监听放到具体组件里（见 ChatTabComp）
  */
 export class WindowUtil {
   // AppStorage key（与公司 ScreenUtil 设计一致）

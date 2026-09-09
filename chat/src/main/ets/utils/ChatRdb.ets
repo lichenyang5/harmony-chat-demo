@@ -184,19 +184,31 @@ export class ChatRdb {
     }
   }
 
-  /** 删除指定会话 + 它的所有消息 */
-  static async deleteSession(sessionId: string): Promise<void> {
-    if (ChatRdb.store === null) return
+  /** 删除指定会话 + 它的所有消息，成功返回 true */
+  static async deleteSession(sessionId: string): Promise<boolean> {
+    if (ChatRdb.store === null) return false
+    let transaction: relationalStore.Transaction | null = null
     try {
+      transaction = await ChatRdb.store.createTransaction()
       const sPred = new relationalStore.RdbPredicates('chat_session')
       sPred.equalTo('id', sessionId)
-      await ChatRdb.store.delete(sPred)
+      await transaction.delete(sPred)
 
       const mPred = new relationalStore.RdbPredicates('chat_message')
       mPred.equalTo('session_id', sessionId)
-      await ChatRdb.store.delete(mPred)
+      await transaction.delete(mPred)
+      await transaction.commit()
+      return true
     } catch (e) {
+      if (transaction !== null) {
+        try {
+          await transaction.rollback()
+        } catch (rollbackError) {
+          LogUtil.e(TAG, 'deleteSession rollback failed: ' + JSON.stringify(rollbackError))
+        }
+      }
       LogUtil.e(TAG, 'deleteSession failed: ' + JSON.stringify(e))
+      return false
     }
   }
 }

@@ -1,27 +1,21 @@
-import { common } from '@kit.AbilityKit'
 import { ChatSession } from '../models/chatModel'
-import { getChatLoadState } from '../viewmodel/ChatLoadState'
-import { HMUtil } from 'common'
 import { ChatRdb } from '../utils/ChatRdb'
 
 /**
- * 消息记录页控制器。
+ * 历史会话控制器。
  *
  * 职责：
  * - 从持久化存储加载会话列表
  * - 删除单条会话（持久化 + 本地列表同步）
- * - 通过全局信号触发 ChatTabComp 加载指定历史会话
  * - 时间戳格式化
  */
 export class ChatHistoryController {
   /**
-   * 从 Preferences 读取所有会话，按 updateTime 倒序排列。
-   *
-   * @param ctx UIAbility 上下文（Preferences 读取需要）
-   * @returns 会话列表，读取失败时返回空数组
+   * 从 RDB 读取所有会话，并为 UI 再做一次更新时间倒序保护。
    */
-  async  loadData(ctx: common.UIAbilityContext): Promise<ChatSession[]> {
-    return await ChatRdb.loadSessions()
+  async loadData(): Promise<ChatSession[]> {
+    const sessions = await ChatRdb.loadSessions()
+    return sessions.sort((left: ChatSession, right: ChatSession) => right.updateTime - left.updateTime)
   }
 
   /**
@@ -31,33 +25,16 @@ export class ChatHistoryController {
    * 再从传入列表中过滤掉对应项并返回新列表。
    * 使用本地过滤而非重新查询数据库，避免列表闪烁。
    *
-   * @param ctx UIAbility 上下文（保留签名兼容，ChatRdb 不依赖 ctx）
    * @param sessionId 要删除的会话 ID
-   * @param sessions 当前页面持有的会话列表
-   * @returns 移除后的新列表
+   * @param sessions 当前抽屉持有的会话列表
+   * @returns 删除成功时返回新列表，数据库操作失败时返回 null
    */
-  async deleteSession(ctx: common.UIAbilityContext, sessionId: string,
-    sessions: ChatSession[]): Promise<ChatSession[]> {
-    await ChatRdb.deleteSession(sessionId)
-    // 通知 ChatTabComp：若它当前正在显示这个会话，需要重置
-    getChatLoadState().deletedSessionId = sessionId
+  async deleteSession(sessionId: string, sessions: ChatSession[]): Promise<ChatSession[] | null> {
+    const deleted = await ChatRdb.deleteSession(sessionId)
+    if (!deleted) {
+      return null
+    }
     return sessions.filter((s: ChatSession) => s.id !== sessionId)
-  }
-
-  /**
-   * 设置全局加载信号并 pop 回首页，触发 ChatTabComp 加载该会话。
-   *
-   * 信号流：
-   * ChatHistoryPage 调用 openSession
-   * → ChatLoadState.pendingSessionId 被设置
-   * → HomePage @Monitor 切换到 Chat Tab（index = 1）
-   * → ChatTabComp @Monitor 调用 loadSessionById 恢复会话
-   *
-   * @param sessionId 要打开的会话 ID
-   */
-  openSession(sessionId: string): void {
-    getChatLoadState().pendingSessionId = sessionId
-    HMUtil.pop()
   }
 
   /**

@@ -11,7 +11,6 @@ import { ChatRdb } from '../utils/ChatRdb'
  * 职责：
  * - 会话 ID 初始化
  * - 按 ID 从持久化存储加载会话（ChatTabComp 使用）
- * - 从路由参数还原会话对象（ChatPage 使用）
  * - 新建会话
  * - 持久化当前会话
  *
@@ -65,30 +64,15 @@ export class ChatSessionController {
   }
 
   /**
-   * 从 ChatSession 对象直接恢复到 ViewModel（ChatPage 从路由参数接收时使用）。
-   *
-   * @param session 路由参数传入的会话对象（含 ChatMessagePlain 消息列表）
-   */
-  restoreSession(session: ChatSession): void {
-    const sessionId = session.id ? session.id : Date.now().toString()
-    const sourceMessages: ChatMessagePlain[] = session.messages ? session.messages : []
-
-    this.vm.historyMessage = sourceMessages.map((plain: ChatMessagePlain, i: number) =>
-      ChatMessage.fromPlain(plain, sessionId, i))
-    this.vm.sessionId = sessionId
-    this.vm.inputContent = ''
-    this.vm.isLoading = false
-  }
-
-  /**
    * 新建会话：重置 ViewModel 全部状态。
-   * 若当前正在生成 AI 回复则忽略，防止中断流式请求。
+   * 若当前正在生成 AI 回复则返回 false，调用方负责给用户提示。
    */
-  newSession(): void {
+  newSession(): boolean {
     if (this.vm.isLoading) {
-      return
+      return false
     }
     this.vm.resetForNewSession()
+    return true
   }
 
   /**

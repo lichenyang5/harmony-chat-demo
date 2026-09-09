@@ -3,7 +3,7 @@ import { HMRouter } from '@hadss/hmrouter'
 import { AppStorageV2 } from '@kit.ArkUI'
 import { AppTabState } from '../viewmodel/AppTabState'
 import { HomeTabComp } from '../components/HomeTabComp'
-import { ChatTabComp, ChatLoadState, getChatLoadState } from 'chat'
+import { ChatTabComp } from 'chat'
 import { ProfileTabComp } from '../components/ProfileTabComp'
 import { WindowUtil, LogUtil } from 'common'
 import { AuthPersist, getAuthPersist } from '../utils/AuthPersist'
@@ -15,12 +15,6 @@ import { ThemeState, getThemeState } from '../viewmodel/ThemeState'
  * 职责：
  * - 作为三个功能 Tab 的容器（首页、AI助手、我的）
  * - 通过 @Provider 向子 Tab 组件注入登录状态和主题状态
- * - 监听跨页面会话加载信号，自动切换到 Chat Tab
- *
- * 信号流（跨页会话加载）：
- * ChatHistoryPage 设置 pendingSessionId
- * → HomePage @Monitor 切换 Tab 到 index=1
- * → ChatTabComp @Monitor 调用 loadSessionById 恢复会话
  */
 @HMRouter({ pageUrl: EntryRoutes.PAGE_HOME })
 @ComponentV2
@@ -34,25 +28,6 @@ export struct HomePage {
   @Provider() auth: AuthPersist = getAuthPersist()
   /** Provider 2：全局主题，供所有 Tab 组件通过 @Consumer 消费 */
   @Provider() theme: ThemeState = getThemeState()
-
-  /**
-   * 跨页面加载信号：
-   * ChatHistoryPage 点击某条会话后设置 pendingSessionId 并 pop，
-   * 此处监听到变化后切到 Chat Tab（index = 1），
-   * ChatTabComp 内再监听并执行 loadSessionById。
-   */
-  @Local chatLoadState: ChatLoadState = getChatLoadState()
-
-  /**
-   * 监听跨页面会话信号，有信号时切换到 Chat Tab。
-   * ChatTabComp 负责实际的会话加载。
-   */
-  @Monitor('chatLoadState.pendingSessionId')
-  onPendingSession(): void {
-    if (this.chatLoadState.pendingSessionId) {
-      this.tabState.currentIndex = 1
-    }
-  }
 
   aboutToAppear(): void {
     LogUtil.i('HomePage', 'ooo这是混淆测试')

@@ -13,8 +13,6 @@
 export class EntryRoutes {
   static readonly PAGE_HOME: string = 'pages/Home'
   static readonly PAGE_LOGIN: string = 'pages/Login'
-  static readonly PAGE_CHAT: string = 'pages/Chat'
-  static readonly PAGE_CHAT_HISTORY: string = 'pages/ChatHistory'
   static readonly PAGE_PRODUCT_DETAIL: string = 'pages/ProductDetail'
   /** 购物车页面 */
   static readonly PAGE_CART: string = 'pages/Cart'

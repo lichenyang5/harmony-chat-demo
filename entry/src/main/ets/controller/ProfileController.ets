@@ -10,7 +10,6 @@ import { clearAuth } from '../utils/AuthPersist'
  * 职责：
  * - 退出登录（重置 Tab 下标 + 清除持久化凭证）
  * - 跳转到登录页（未登录时"去登录"按钮）
- * - 跳转到消息记录页
  */
 export class ProfileController {
   /**
@@ -33,16 +32,6 @@ export class ProfileController {
     HMRouterMgr.push({
       navigationId: NAV_ID,
       pageUrl: EntryRoutes.PAGE_LOGIN
-    })
-  }
-
-  /**
-   * 跳转到消息记录页（受 AuthInterceptor 保护，未登录会弹登录提示）。
-   */
-  goHistory(): void {
-    HMRouterMgr.push({
-      navigationId: NAV_ID,
-      pageUrl: EntryRoutes.PAGE_CHAT_HISTORY
     })
   }
 

@@ -56,7 +56,7 @@ export struct ProfileTabComp {
   }
 
   /**
-   * 无角标的菜单行（消息记录 / 帮助 / 关于）。
+   * 无角标的菜单行（帮助 / 关于）。
    * 这类菜单没有响应式依赖，安心用 @Builder 收敛代码。
    */
   @Builder
@@ -175,7 +175,6 @@ export struct ProfileTabComp {
         .onClick(() => this.controller.goFavoriteList())
 
         // ─ 其余无角标菜单 ─
-        this.plainMenuRow('消息记录', () => this.controller.goHistory())
         this.plainMenuRow('帮助与反馈', () => {})
         this.plainMenuRow('关于', () => {})
       }
