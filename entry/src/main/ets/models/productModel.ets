@@ -15,4 +15,5 @@ export class Product {
   rating: number = 0           // 评分
   sales: number = 0            // 销量
   stock: number = 0            // 库存
+  coverHeight: number = 140    // 首页瀑布流封面高度
 }

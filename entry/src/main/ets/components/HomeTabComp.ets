@@ -12,12 +12,12 @@ import { CartState, getCartState } from '../viewmodel/CartState'
 /**
  * 首页 Tab 组件。
  *
- * 职责：纯 UI 渲染（顶部问候 + 搜索框 + 商品网格 + 购物车入口）。
+ * 职责：纯 UI 渲染（顶部问候 + 搜索框 + 商品瀑布流 + 购物车入口）。
  * 所有业务逻辑（路由跳转、拉取商品、搜索过滤）委托给 HomeController。
  *
  * 响应式说明：
  * - aboutToAppear 时 controller.loadProducts() 拉 /api/products → vm.products
- * - 商品网格：build 调 controller.getFilteredProducts()，访问 vm.products
+ * - 商品瀑布流：两列独立纵向排列，避免等高 Grid 的同行留白
  *   / vm.searchKeyword 自动建立依赖
  * - 购物车角标：读全局单例 cart.totalCount，加购后自动同步
  */
@@ -98,7 +98,7 @@ export struct HomeTabComp {
           this.vm.searchKeyword = v
         })
 
-      // ── 主区域：loading / error / 商品网格 三选一 ──────────────────────
+      // ── 主区域：loading / error / 商品瀑布流 三选一 ────────────────────
       if (this.vm.loading && this.vm.products.length === 0) {
         Column({ space: 12 }) {
           LoadingProgress()
@@ -127,26 +127,42 @@ export struct HomeTabComp {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
       } else {
-        Grid() {
-          ForEach(
-            this.controller.getFilteredProducts(),
-            (product: Product) => {
-              GridItem() {
+        Scroll() {
+          Row({ space: 12 }) {
+            Column({ space: 12 }) {
+              ForEach(
+                this.controller.getFilteredProducts().filter((_p: Product, index: number) => index % 2 === 0),
+                (product: Product) => {
+                  ProductCardComp({
+                    product: product,
+                    onTap: (p: Product) => { this.controller.goDetail(p) }
+                  })
+                },
+                (p: Product) => p.id
+              )
+            }
+            .layoutWeight(1)
+
+            Column({ space: 12 }) {
+              ForEach(
+                this.controller.getFilteredProducts().filter((_p: Product, index: number) => index % 2 === 1),
+                (product: Product) => {
                 ProductCardComp({
                   product: product,
                   onTap: (p: Product) => { this.controller.goDetail(p) }
                 })
-              }
-            },
-            (p: Product) => p.id
-          )
+                },
+                (p: Product) => p.id
+              )
+            }
+            .layoutWeight(1)
+          }
+          .alignItems(VerticalAlign.Top)
+          .padding({ left: 16, right: 16, bottom: 16 })
         }
-        .columnsTemplate('1fr 1fr')
-        .columnsGap(12)
-        .rowsGap(12)
-        .padding({ left: 16, right: 16, bottom: 16 })
         .width('100%')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
         .backgroundColor(this.theme.bg)
       }
     }

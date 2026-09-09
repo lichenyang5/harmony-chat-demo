@@ -36,10 +36,10 @@ export struct ProductCardComp {
     // 部分 ArkUI 版本里对 Stack 子节点不生效导致全部子元素跑到中间。
     Stack({ alignContent: Alignment.TopEnd }) {
       Column({ space: 6 }) {
-        // 商品图（rawfile 加载本地图，product.image 形如 'images/1.png'）
+        // 同一商品图按服务端高度裁切，形成错落的瀑布流节奏。
         Image($rawfile(this.product.image))
           .width('100%')
-          .height(90)
+          .height(this.product.coverHeight)
           .objectFit(ImageFit.Cover)
           .borderRadius(8)
 
@@ -51,11 +51,11 @@ export struct ProductCardComp {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        // 简短描述（单行省略）
+        // 描述允许两行，配合不同长度的接口文案形成不同卡片高度。
         Text(this.product.desc)
           .fontSize(11)
           .fontColor(this.theme.textSecondary)
-          .maxLines(1)
+          .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         // 价格行：当前价 + 原价划线（仅当原价 > 现价才显示）
