@@ -73,7 +73,35 @@ server 独立运行，通过 HTTP / SSE / WebSocket 提供 Mock 数据
 
 ## 快速运行
 
-### 1. 启动本地服务端
+### 1. 创建本机工程配置
+
+首次克隆后，在项目根目录执行：
+
+```powershell
+Copy-Item .\build-profile.example.json5 .\build-profile.json5
+```
+
+`build-profile.json5` 只保存在本机，不会被 Git 跟踪。这样 DevEco Studio 自动生成的证书路径和签名密码不会进入仓库。
+
+然后打开本机 `build-profile.json5`，设置后端地址：
+
+```json5
+"buildProfileFields": {
+  "API_BASE_URL": "http://192.168.x.x:3000"
+}
+```
+
+- HarmonyOS 真机：填写电脑的局域网 IPv4；
+- 本机预览或后端同机环境：可使用 `http://127.0.0.1:3000`；
+- 地址只在本机配置一次，不再修改 `ApiConstants.ets` 业务源码。
+
+修改构建字段后，在 DevEco Studio 中选中 `common` 模块，执行 `Build > Generate Build Profile 'common'`。生成的 `BuildProfile.ets` 同样属于本机文件，不会被 Git 跟踪。
+
+### 2. 配置本机自动签名
+
+在 DevEco Studio 中打开 `File > Project Structure > Project > Signing Configs`，勾选 `Automatically generate signature`。DevEco Studio 会把签名材料写入本机 `build-profile.json5`，但该文件已被 Git 忽略。
+
+### 3. 启动本地服务端
 
 ```bash
 cd server
@@ -88,16 +116,9 @@ http://localhost:3000
 WebSocket: ws://localhost:3000/api/ws
 ```
 
-### 2. 配置真机访问地址
+### 4. 检查真机网络
 
-真机中的 `localhost` 指向手机本身，需要把客户端地址改成电脑的局域网 IPv4：
-
-```ts
-// common/src/main/ets/constants/ApiConstants.ets
-export class ApiConstants {
-  static readonly BASE_URL: string = 'http://192.168.x.x:3000'
-}
-```
+真机中的 `localhost` 指向手机本身，因此本机 `build-profile.json5` 的 `API_BASE_URL` 必须使用电脑局域网 IPv4。
 
 Windows 可通过以下命令查看 IPv4：
 
@@ -107,7 +128,7 @@ ipconfig
 
 确保电脑和手机处于同一局域网，并允许 Node.js 通过 Windows 防火墙。
 
-### 3. 运行 HarmonyOS 应用
+### 5. 运行 HarmonyOS 应用
 
 1. 使用 DevEco Studio 打开项目；
 2. 等待 ohpm 和工程同步完成；
@@ -115,7 +136,7 @@ ipconfig
 4. 连接模拟器或真机；
 5. 点击 Run 安装并启动。
 
-### 4. 演示账号
+### 6. 演示账号
 
 ```text
 账号：admin
@@ -153,6 +174,7 @@ ipconfig
 ### 最新功能
 
 - [聊天会话抽屉重构系列导读](./docs/33-harmony-chat-history-drawer-series-index.md)
+- [签名配置本地化与 API 环境化](./docs/37-harmonyos-local-build-profile-and-api-environments.md)
 - [从双页面跳转到单入口右侧抽屉](./docs/34-harmony-chat-single-entry-drawer-architecture.md)
 - [RDB、会话切换、左滑删除与并发保护](./docs/35-harmony-chat-history-drawer-session-management.md)
 - [隐形遮罩挡住 TextInput 的排错过程](./docs/36-arkui-invisible-overlay-blocks-textinput.md)
@@ -183,7 +205,7 @@ ipconfig
 
 ### 签名提示证书过期
 
-在 DevEco Studio 中重新生成或选择有效的自动签名配置，再执行 Clean/Rebuild。系统时间晚于证书 `NotAfter` 时，旧证书无法继续签名。
+在 DevEco Studio 中重新生成或选择有效的自动签名配置，再执行 Clean/Rebuild。系统时间晚于证书 `NotAfter` 时，旧证书无法继续签名。签名信息只应保存在本机 `build-profile.json5`，不要提交证书、Profile、密钥库或密码。
 
 ### 输入框可见但无法唤起键盘
 

@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "npm run test:config",
     "dev": "node server.js",
     "dev:next": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:api": "node --test tests/products.contract.test.mjs"
+    "test:api": "node --test tests/products.contract.test.mjs",
+    "test:config": "node --test tests/project-config.contract.test.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
