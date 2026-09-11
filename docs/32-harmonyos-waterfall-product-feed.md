@@ -1,336 +1,389 @@
-# 鸿蒙首页从等高商品 Grid 到双列瀑布流：同一张图也能做出小红书式浏览节奏
+# HarmonyOS 双列瀑布流进阶：估算卡片高度，把内容放入真正更短的一列
 
-> 项目：`harmony-chat-demo`
+> 案例项目：`harmony-chat-demo`
 >
-> 模块：`entry`（HarmonyOS 前端）+ `server`（Next.js mock API）
+> 技术栈：HarmonyOS ArkTS + ArkUI + Next.js Mock API
 >
-> 本文代码：课程商品首页。**不改业务含义**，仍然保留商品详情、价格、购物车和收藏；只把“整齐但单调的两列商品网格”升级为“封面、文案高度错落的双列瀑布流”。
+> 目标：把按奇偶下标分列的“伪均衡”升级为按累计预估高度分列，并用 28 条提示词与 AI 助手模板验证滚动效果。
 
-很多 Demo 的首页一开始都是这个形态：两列 `Grid`，每张卡片同样高，封面同样高，描述只显示一行。它稳定、好写，但当商品数量一多，视觉上会变成整齐的表格，和内容社区那种“想一直往下刷”的感觉相差很远。
+双列 `Column` 能消除 `Grid` 的同行留白，却不代表两列一定均衡。最常见的写法是偶数下标放左列、奇数下标放右列：它保证两列数量接近，但完全不关心每张卡片有多高。一旦同一侧连续分到长图或长文案，页面底部就会出现明显的长短腿。
 
-这次改造有一个刻意的限制：**所有课程仍然使用同一张本地图片**。我们只通过后端返回的封面高度和长短不一的文案，做出真实的错落效果。这很适合 Demo：无需先准备一堆素材，也能把瀑布流的完整数据链路和布局思路讲清楚。
+本文用项目中的真实实现讲清楚三个问题：怎样预估一张 ArkUI 卡片的高度、怎样维护两列累计高度、怎样让加载和搜索都走同一套分列流程。
 
 ---
 
-## 一、先看目标：不是“高度不同的 Grid”，而是两列独立的卡片流
+## 一、问题本质：数量均衡不等于高度均衡
 
-改造前的结构很典型：
-
-```text
-Grid（两列）
-  ├─ GridItem：商品 1
-  ├─ GridItem：商品 2
-  ├─ GridItem：商品 3
-  └─ GridItem：商品 4
-```
-
-如果只给 `GridItem` 内的图片设置不同高度，会发生一个容易忽略的问题：**同一行的高度由最高卡片决定**。矮卡片下面会留下大片空白，它看起来仍然是表格，不是瀑布流。
-
-这次改造成：
-
-```text
-Scroll
-  └─ Row
-      ├─ Column（左列，独立向下生长）
-      │   ├─ 商品 1：132vp 封面
-      │   ├─ 商品 3：158vp 封面
-      │   └─ 商品 5：206vp 封面
-      └─ Column（右列，独立向下生长）
-          ├─ 商品 2：194vp 封面
-          ├─ 商品 4：120vp 封面
-          └─ 商品 6：144vp 封面
-```
-
-左右列没有共同的“行”概念，所以每一列都会从自己的上一张卡片后面继续排，空白自然消失。这是最容易控制、最适合小型数据集的双列瀑布流实现。
-
-> 它不是复杂的“动态计算最短列再插入”的通用算法；本项目用筛选结果的奇偶下标分列。对于首页 12 条 mock 数据足够直观。数据量很大、支持分页或卡片高度完全不可预估时，再升级成按累计高度分配或虚拟化列表。
-
----
-
-## 二、数据先行：把视觉差异变成接口契约
-
-瀑布流不是纯前端样式问题。卡片要错落，客户端必须能拿到差异化数据。因此我们给商品接口新增了 `coverHeight`：
+原来的分列代码类似这样：
 
 ```ts
-// server/app/api/products/route.ts
-interface Product {
-  id: string
+const left = products.filter((_item, index) => index % 2 === 0)
+const right = products.filter((_item, index) => index % 2 === 1)
+```
+
+如果四张卡片的高度依次是 `300、150、280、160`，结果是：
+
+```text
+左列：300 + 280 = 580
+右列：150 + 160 = 310
+```
+
+两边都是两张卡片，累计高度却相差 270。真正要优化的目标不是卡片数量，而是每次插入前都选择当前累计高度更短的一列：
+
+```text
+初始：left = 0, right = 0
+卡片 A 高 300 → 左列，left = 300
+卡片 B 高 150 → 右列，right = 150
+卡片 C 高 280 → 右列，right = 430
+卡片 D 高 160 → 左列，left = 460
+```
+
+最终只相差 30，瀑布流底部会自然得多。
+
+---
+
+## 二、本次实现后的文件结构
+
+```text
+harmony-chat-demo/
+├─ entry/src/main/ets/
+│  ├─ components/
+│  │  ├─ HomeTabComp.ets          # 只消费左右列并渲染
+│  │  └─ ProductCardComp.ets      # 卡片真实可见结构
+│  ├─ controller/
+│  │  └─ HomeController.ets       # 加载、搜索、触发重新分列
+│  ├─ models/
+│  │  └─ productModel.ets         # coverHeight + contentType
+│  ├─ utils/
+│  │  └─ WaterfallLayout.ts       # 纯函数：估高与最短列分配
+│  └─ viewmodel/
+│     └─ HomeViewModel.ets        # products + leftProducts + rightProducts
+└─ server/
+   ├─ app/api/products/route.ts   # 28 条提示词 / AI 助手假数据
+   └─ tests/
+      ├─ waterfall-layout.test.mjs
+      └─ products.contract.test.mjs
+```
+
+这里最重要的拆分是：组件不计算布局，控制器不重复实现算法，算法文件也不依赖 ArkUI。`WaterfallLayout.ts` 是纯 TypeScript，因此可以用 Node 22.18+ 的原生类型剥离能力直接测试，随后仍由 ArkTS 工程引用。项目在 `server/package.json` 中声明了最低 Node 版本，避免旧版本 Node 无法加载 `.ts`。
+
+---
+
+## 三、第一步：明确“可预估”的卡片结构
+
+卡片真实显示的主要高度来自四部分：
+
+```text
+服务端 coverHeight
++ 标题可见行数 × 标题行高
++ 摘要可见行数 × 摘要行高
++ 类型、评分、内边距等固定区域
++ 列内间距
+```
+
+对应的最小输入接口只保留算法真正需要的字段：
+
+```ts
+export interface WaterfallCardMetric {
   name: string
-  price: number
-  originalPrice: number
   desc: string
-  image: string
-  tag: string
-  rating: number
-  sales: number
-  stock: number
-  coverHeight: number // 新增：封面在首页中占用的高度
+  coverHeight: number
+}
+```
+
+不要让工具函数直接依赖完整 `Product`。这样它既能服务当前首页，以后也可以服务会话收藏卡片、笔记流或模板市场。
+
+项目中的估高实现如下：
+
+```ts
+const MIN_COVER_HEIGHT: number = 120
+const TITLE_CHARS_PER_LINE: number = 10
+const DESCRIPTION_CHARS_PER_LINE: number = 15
+const TITLE_MAX_LINES: number = 2
+const DESCRIPTION_MAX_LINES: number = 3
+const TITLE_LINE_HEIGHT: number = 20
+const DESCRIPTION_LINE_HEIGHT: number = 17
+const CARD_FIXED_HEIGHT: number = 70
+
+function estimateVisibleLines(
+  text: string,
+  charsPerLine: number,
+  maxLines: number
+): number {
+  const length = Math.max(1, text.trim().length)
+  return Math.min(maxLines, Math.max(1, Math.ceil(length / charsPerLine)))
 }
 
-const MOCK_PRODUCTS: Product[] = [
-  {
-    id: '001',
-    name: 'ArkTS 快速入门',
-    desc: '鸿蒙原生开发语言全解析',
-    image: 'images/1.png', // 所有条目仍是同一张本地图片
-    coverHeight: 132,
-    // ...
-  },
-  {
-    id: '002',
-    name: 'HarmonyOS 实战',
-    desc: '从零到项目上线完整教程，涵盖登录、列表与网络请求。',
-    image: 'images/1.png',
-    coverHeight: 194,
-    // ...
+export function estimateWaterfallCardHeight(card: WaterfallCardMetric): number {
+  const coverHeight = Math.max(MIN_COVER_HEIGHT, card.coverHeight)
+  const titleLines = estimateVisibleLines(card.name, 10, 2)
+  const descriptionLines = estimateVisibleLines(card.desc, 15, 3)
+
+  return coverHeight +
+    titleLines * TITLE_LINE_HEIGHT +
+    descriptionLines * DESCRIPTION_LINE_HEIGHT +
+    CARD_FIXED_HEIGHT
+}
+```
+
+这不是像素级测量，而是稳定的布局启发式。中文字符大致按数量估算换行，并用 `maxLines` 限制上限，与 `ProductCardComp` 中标题最多两行、摘要最多三行保持一致。
+
+### 为什么不能只使用 `coverHeight`？
+
+两张封面同高的卡片，标题可能分别占一行和两行，摘要可能分别占一行和三行。如果算法只累计图片高度，视觉上的列高依然会漂移。估算值必须覆盖所有会变化的可见区域。
+
+### 为什么还需要固定高度？
+
+类型标签、免费状态、评分、使用次数、组件 `space` 和上下内边距都占空间。它们不会随数据变化，可以合并为一个固定值。该值不必追求绝对精确，只要所有卡片使用同一套规则，就能正确比较相对高低。
+
+---
+
+## 四、第二步：逐项放入当前更短的一列
+
+结果对象同时记录数组和累计高度：
+
+```ts
+export class WaterfallColumns<T extends WaterfallCardMetric> {
+  left: T[] = []
+  right: T[] = []
+  leftHeight: number = 0
+  rightHeight: number = 0
+}
+```
+
+核心算法只有一次线性遍历：
+
+```ts
+export function distributeWaterfall<T extends WaterfallCardMetric>(
+  cards: T[]
+): WaterfallColumns<T> {
+  const columns = new WaterfallColumns<T>()
+
+  cards.forEach((card: T) => {
+    const estimatedHeight = estimateWaterfallCardHeight(card)
+    if (columns.leftHeight <= columns.rightHeight) {
+      columns.left.push(card)
+      columns.leftHeight += estimatedHeight + 12
+    } else {
+      columns.right.push(card)
+      columns.rightHeight += estimatedHeight + 12
+    }
+  })
+
+  return columns
+}
+```
+
+时间复杂度是 `O(n)`，额外空间是两列数组的 `O(n)`。相等时固定优先放左列，可以保证相同输入得到稳定结果，避免刷新后卡片随机换列。
+
+---
+
+## 五、第三步：让 ViewModel 保存“布局结果”
+
+原始数据与布局结果承担不同职责：
+
+```ts
+@ObservedV2
+export class HomeViewModel {
+  @Trace searchKeyword: string = ''
+  @Trace products: Product[] = []
+  @Trace leftProducts: Product[] = []
+  @Trace rightProducts: Product[] = []
+  @Trace loading: boolean = false
+  @Trace error: string = ''
+}
+```
+
+- `products` 是接口返回的完整数据源。
+- `leftProducts`、`rightProducts` 是当前关键词下的布局投影。
+- 搜索不会破坏原始列表，清空关键词后可以立刻恢复全部内容。
+
+控制器统一管理加载和搜索两个入口：
+
+```ts
+async loadProducts(): Promise<void> {
+  this.vm.loading = true
+  this.vm.error = ''
+  try {
+    this.vm.products = await this.biz.list()
+    this.rebuildWaterfall()
+  } finally {
+    this.vm.loading = false
   }
-]
-```
+}
 
-这里有两个关键点：
+updateSearchKeyword(keyword: string): void {
+  this.vm.searchKeyword = keyword
+  this.rebuildWaterfall()
+}
 
-1. `coverHeight` 是内容数据的一部分，而不是在组件里用 `id % 3` 临时猜出来。后续接真实后端时，图片宽高、裁切策略或内容运营配置都可以在服务端统一控制。
-2. `desc` 也故意设计成长短不一。封面高度不同只是第一层，标题和摘要的行数差异会让卡片更自然。
-
-鸿蒙侧的模型必须同步扩展，否则网络请求即使成功，UI 也读不到规范字段：
-
-```ts
-// entry/src/main/ets/models/productModel.ets
-export class Product {
-  id: string = ''
-  name: string = ''
-  // ...原有字段
-  coverHeight: number = 140 // 没有返回时的安全默认值
+private rebuildWaterfall(): void {
+  const filtered = this.getFilteredProducts()
+  const columns = distributeWaterfall(filtered)
+  this.vm.leftProducts = columns.left
+  this.vm.rightProducts = columns.right
 }
 ```
 
-给默认值的意义是兼容：本地旧缓存、旧接口或手工构造的 `Product` 也不会把图片渲染成 0 高度。
+这一步解决了一个很容易遗漏的问题：搜索结果不能继续沿用初始左右列，否则只能分别过滤两列，无法重新达到高度均衡。正确顺序应当是：
+
+```text
+完整数据 → 按关键词过滤 → 从空列重新估高分配 → 更新 UI
+```
 
 ---
 
-## 三、同一张图如何制造不同封面？核心是 Cover 裁切
+## 六、第四步：组件只负责渲染两列
 
-卡片组件不需要知道图片是否重复，只关心拿到什么路径和什么高度：
-
-```ts
-// entry/src/main/ets/components/ProductCardComp.ets
-Image($rawfile(this.product.image))
-  .width('100%')
-  .height(this.product.coverHeight)
-  .objectFit(ImageFit.Cover)
-  .borderRadius(8)
-```
-
-`ImageFit.Cover` 会保持图片比例、填满容器，并裁掉超出的部分。因此，即使 `images/1.png` 是同一张图，132vp、194vp、206vp 的容器也会呈现不同的视觉截面，而不会把图片硬拉伸变形。
-
-摘要从单行改成最多两行：
+`HomeTabComp` 不再在 `build()` 中多次调用过滤和 `index % 2`：
 
 ```ts
-Text(this.product.desc)
-  .fontSize(11)
-  .fontColor(this.theme.textSecondary)
-  .maxLines(2)
-  .textOverflow({ overflow: TextOverflow.Ellipsis })
-```
-
-这样既保留卡片高度的可控边界，又不会因为一段超长简介把整个列表拉得不可预期。
-
----
-
-## 四、布局实现：`Scroll + Row + 两个 Column`
-
-首页原来使用 `Grid`。现在主区域替换为一个可滚动容器，内部放一个横向 `Row`，再放左右两个独立的 `Column`：
-
-```ts
-// entry/src/main/ets/components/HomeTabComp.ets
 Scroll() {
   Row({ space: 12 }) {
     Column({ space: 12 }) {
-      ForEach(
-        this.controller.getFilteredProducts()
-          .filter((_p: Product, index: number) => index % 2 === 0),
-        (product: Product) => {
-          ProductCardComp({
-            product: product,
-            onTap: (p: Product) => this.controller.goDetail(p)
-          })
-        },
-        (p: Product) => p.id
-      )
+      ForEach(this.vm.leftProducts, (product: Product) => {
+        ProductCardComp({ product: product })
+      }, (product: Product) => product.id)
     }
     .layoutWeight(1)
 
     Column({ space: 12 }) {
-      ForEach(
-        this.controller.getFilteredProducts()
-          .filter((_p: Product, index: number) => index % 2 === 1),
-        (product: Product) => {
-          ProductCardComp({
-            product: product,
-            onTap: (p: Product) => this.controller.goDetail(p)
-          })
-        },
-        (p: Product) => p.id
-      )
+      ForEach(this.vm.rightProducts, (product: Product) => {
+        ProductCardComp({ product: product })
+      }, (product: Product) => product.id)
     }
     .layoutWeight(1)
   }
   .alignItems(VerticalAlign.Top)
-  .padding({ left: 16, right: 16, bottom: 16 })
 }
-.width('100%')
-.layoutWeight(1)
-.scrollBar(BarState.Off)
 ```
 
-这里有几处值得拆开说。
+两个 `Column` 独立向下生长，避免 `Grid` 共享行高造成的留白；`.layoutWeight(1)` 让左右列等宽；外层 `Scroll` 让 28 条内容形成可持续滚动的浏览效果。
 
-### 4.1 为什么外层用 Scroll，而不是把两列放进普通 Column？
+卡片展示也从课程商品改为更贴合聊天 Demo 的 AI 内容：
 
-首页顶部的问候语和搜索框应该固定在页面上方，只有商品区负责滚动。因此把 `Scroll` 放进外层 `Column` 后，配合 `.layoutWeight(1)` 占据剩余高度，正好实现“顶部不动、内容向下滚”。
+```ts
+Text(this.product.contentType === 'assistant' ? 'AI 助手' : '提示词')
+Text('免费使用')
+Text(`${this.product.sales} 人使用`)
+```
 
-### 4.2 为什么两个 Column 都要 `layoutWeight(1)`？
-
-`Row` 里左右列各占 1 份剩余宽度，才能稳定得到等宽双列。不要手写固定宽度，否则横竖屏、不同设备宽度或系统字体变化时都容易溢出。
-
-### 4.3 搜索后还能保持瀑布流吗？
-
-可以。分列的数据源不是原始 `products`，而是 `getFilteredProducts()` 的结果。用户输入关键词后，过滤结果会重新从 0 开始交替分给左右列；商品详情跳转、收藏状态与价格逻辑仍然复用原组件，不需要额外分支。
+标题最多两行、描述最多三行。这两个限制必须与估高常量同步，否则算法认为只显示三行，组件却实际显示五行，误差会随着卡片数量逐渐累积。
 
 ---
 
-## 五、这次最难处理的 4 个点
+## 七、假数据怎样设计，才能看出真实效果
 
-### 难点 1：误以为“卡片变高”就等于瀑布流
+这次接口放入 28 条内容，提示词与 AI 助手各占一部分，例如：
 
-这是最常见的视觉陷阱。`Grid` 中同一行的两个 `GridItem` 会共享行高，左卡片 120vp、右卡片 200vp 时，左边的 80vp 空白依旧存在。
+- 提示词：把复杂知识讲给小学生、用苏格拉底方式追问、将需求改写为用户故事、把长文章压缩为知识卡片。
+- AI 助手：小红书爆款文案助手、旅行规划助手、代码审查搭档、面试模拟官、英语口语陪练。
 
-**处理方式**：移除同一行这个约束，让左右 `Column` 独立垂直排布。只要卡片高度不一致，瀑布效果就自然出现。
+所有卡片仍使用原 Demo 图片 `images/1.png`，差异来自：
 
-### 难点 2：接口、模型与组件必须同时演进
+- `coverHeight` 从 120 到 230，且有多种离散高度。
+- 标题有一行和两行。
+- 摘要有明显长短变化。
+- `contentType` 同时包含 `prompt` 与 `assistant`。
 
-只改服务端会导致 ArkTS 模型没有字段；只改前端模型又会永远走默认高度。完整链路是：
+服务端用工厂函数统一补齐不变字段：
 
-```text
-Next.js mock 数据 coverHeight
-  → GET /api/products JSON
-  → Product.coverHeight
-  → ProductCardComp Image.height(...)
-  → 双列独立 Column 排布
+```ts
+function createProduct(seed: ProductSeed): Product {
+  return {
+    ...seed,
+    price: 0,
+    originalPrice: 0,
+    image: 'images/1.png',
+    stock: 999
+  }
+}
 ```
 
-这类 UI 改造最怕“视觉代码写好了，数据没跟上”。因此我们给接口加了一个最小契约测试：
+这样新增假数据时只写真正有差异的字段，也能从源头保证不会误混入另一张图片。
+
+---
+
+## 八、最难处理的几个点
+
+### 1. 估算高度不等于测量高度
+
+字体缩放、设备宽度、中英文比例都会影响实际换行。当前方案的目标是低成本改善两列平衡，不是实现像素级排版引擎。对于固定两列、限定 `maxLines` 的 Demo，启发式估算足够稳定。
+
+如果未来必须精确，可在卡片首次布局后记录实际高度再重排，但这会引入二次布局和视觉跳动，需要缓存测量结果，并谨慎处理滚动位置。
+
+### 2. 算法参数必须与 UI 同源演进
+
+`TITLE_MAX_LINES = 2`、`DESCRIPTION_MAX_LINES = 3` 对应组件的 `.maxLines(2)` 和 `.maxLines(3)`。以后调整字号、行数或新增可变区域时，应同时更新估高参数和测试。
+
+### 3. 搜索是一条新的布局链路
+
+只在接口加载后分列一次是不够的。搜索后的内容集合已经变化，必须从零重新累计左右高度。本项目由 `updateSearchKeyword()` 统一触发，避免 UI 组件自行修改关键词却忘了更新两列。匹配范围还包含卡片可见的“提示词 / AI 助手”类型标签，保证搜索框提示与真实行为一致。
+
+### 4. `Scroll + 两个 Column` 会一次构建全部卡片
+
+28 条 Demo 数据没有问题。若未来变成几百条真实内容，应增加分页，并评估 ArkUI 的瀑布流 / 懒加载容器或虚拟化方案，避免首次构建过多组件。
+
+---
+
+## 九、用测试守住算法和接口契约
+
+算法测试直接导入生产文件，验证四件事：最短列分配、长文案增高、空数据，以及按“提示词 / AI 助手”可见标签搜索。
 
 ```js
-// server/tests/products.contract.test.mjs
-test('products API supplies varied cover heights for a waterfall feed', async () => {
-  const response = await fetch('http://127.0.0.1:3000/api/products')
-  const payload = await response.json()
-  const heights = payload.data.map((product) => product.coverHeight)
+test('places each next card into the currently shorter column', () => {
+  const result = distributeWaterfall([
+    card('a', 220),
+    card('b', 100),
+    card('c', 100),
+    card('d', 100)
+  ])
 
-  assert.ok(heights.every((height) => Number.isInteger(height) && height >= 120))
-  assert.ok(new Set(heights).size >= 3)
+  assert.deepEqual(result.left.map((item) => item.id), ['a', 'd'])
+  assert.deepEqual(result.right.map((item) => item.id), ['b', 'c'])
 })
 ```
 
-它不关心某一张卡片必须是 132vp，而是验证真正的产品约束：所有条目都有合理高度，且列表里至少有三种高度，才会产生瀑布节奏。
+另外三条分别验证长文案的预估高度更大、空数组返回两个空列，以及中文内容类型标签能够被搜索。
 
-### 难点 3：同图复用时要避免拉伸
+接口契约测试关注内容是否足以支撑瀑布流，而不是绑定某条具体文案：
 
-封面高度变了以后，如果使用拉伸式填充，人物会变胖或变瘦，Demo 看起来反而更廉价。这里必须显式使用 `ImageFit.Cover`：宁可裁切边缘，也不改变原图比例。
-
-正式项目更推荐接口直接返回图片的原始宽高或 `aspectRatio`，前端根据列宽计算高度；本 Demo 用 `coverHeight` 是为了让案例更短、更聚焦。
-
-### 难点 4：两列交替分配不等于严格均衡
-
-`index % 2` 的优点是简单、稳定、搜索后无需额外状态；缺点是如果连续出现几张特别高的卡片，某一列可能比另一列长很多。
-
-下一步可改成“累计高度更短的一列优先放入”的算法：
-
-```text
-leftHeight = 0, rightHeight = 0
-遍历商品：
-  估算 cardHeight = coverHeight + 标题/摘要/价格区域高度
-  放入当前更短的列
-  更新该列累计高度
+```js
+assert.equal(payload.data.length, 28)
+assert.ok(payload.data.every((item) => item.id.startsWith('ai-')))
+assert.equal(new Set(payload.data.map((item) => item.id)).size, 28)
+assert.ok(new Set(heights).size >= 8)
+assert.deepEqual(contentTypes, new Set(['prompt', 'assistant']))
+assert.ok(payload.data.every((item) => item.image === 'images/1.png'))
 ```
 
-但要注意：文本实际换行高度会受设备宽度、字体缩放影响，这个算法只能估算。对于需要百万级内容流的产品，应该进一步使用分页、懒加载与虚拟化列表，而不是一次性把所有卡片塞进两个 `Column`。
+验证命令：
+
+```bash
+# 纯算法与项目配置测试
+cd server
+npm test
+
+# 先启动 npm run dev，再在另一终端验证接口
+npm run test:api
+```
+
+最后还要执行 Hvigor 构建，确保 Node 能运行的纯 TypeScript 同样满足 ArkTS 工程编译要求。
 
 ---
 
-## 六、保持业务不变，比“重写一个首页”更重要
-
-本次没有把课程商品硬改成“笔记”，因为首页的视觉升级不应该破坏既有业务闭环。
-
-| 既有能力 | 改造后状态 |
-|---|---|
-| 商品搜索 | 仍然通过 `getFilteredProducts()` 工作 |
-| 点击卡片进详情 | 仍通过 `onTap → controller.goDetail()` 工作 |
-| 左上角收藏 | 仍复用 `FavoriteState` |
-| 商品价格、评分、销量 | 继续在卡片内展示 |
-| 购物车入口 | 顶部逻辑不变 |
-
-这是做存量页面改版时很实用的原则：**先替换布局容器与展示密度，尽量不要改动已经跑通的事件、状态和导航链路。** 这样视觉升级的回归范围最小。
-
----
-
-## 七、验证与一个容易混淆的构建问题
-
-本次验证分为两层：
+## 十、完整数据流回顾
 
 ```text
-接口层：node --test tests/products.contract.test.mjs
-  → products API 返回的高度字段满足瀑布流契约
-
-客户端：Hvigor CompileArkTS
-  → ArkTS 组件、布局与模型字段可以通过编译
+GET /api/products
+  → ProductBiz.list()
+  → HomeController.loadProducts()
+  → vm.products 保存完整数据
+  → 关键词过滤
+  → estimateWaterfallCardHeight() 预估每张卡片
+  → distributeWaterfall() 放入当前更短列
+  → vm.leftProducts / vm.rightProducts
+  → HomeTabComp 两个独立 Column 渲染
 ```
 
-项目里曾遇到完整打包失败，错误分别指向过签名证书过期和命令行环境找不到 `java`。这两类问题发生在**打包/签名阶段**，不能和“首页 ArkTS 代码无法编译”混为一谈。
-
-排查构建问题时建议按阶段判断：
-
-```text
-接口测试失败        → 后端数据或接口协议问题
-CompileArkTS 失败    → ArkTS 语法、类型、组件布局问题
-PackageHap / Sign 失败 → Java、SDK、证书、签名配置问题
-```
-
-分层看日志，能避免为了一个签名问题去反复改 UI 代码。
-
----
-
-## 八、完整改造文件清单
-
-```text
-server/
-  ├─ app/api/products/route.ts             # mock 数据新增 coverHeight
-  ├─ package.json                           # 增加 test:api
-  └─ tests/products.contract.test.mjs       # 接口契约测试
-
-entry/src/main/ets/
-  ├─ models/productModel.ets                # Product 新增 coverHeight
-  └─ components/
-      ├─ HomeTabComp.ets                    # Grid → Scroll + Row + 双 Column
-      └─ ProductCardComp.ets                # 动态封面高度 + 两行摘要
-```
-
----
-
-## 九、结语：先用内容密度解决“单调”，再扩展社区能力
-
-从等高 Grid 改成双列瀑布流，不需要先上复杂推荐算法，也不需要先准备十二张不同图片。把视觉差异交给数据（`coverHeight`、不同文案长度），把排布从共享行高的 `Grid` 换成独立纵向的双列 `Column`，就能明显提升首页的信息密度和浏览节奏。
-
-后续如果要把这个课程 Demo 再往“小红书式内容社区”推进，可以按这个顺序演进：
-
-```text
-双列瀑布流
-  → 分页 / 下拉刷新 / 上拉加载
-  → 多封面图与真实图片比例
-  → 收藏列表与本地持久化
-  → 会话卡片、会话详情、继续对话
-  → 单用户内容发布与首页排序
-```
-
-先把页面“刷起来”，再逐步补数据与互动，Demo 才会从功能集合变成真正有产品感的应用。
+真正的思路不是“换一个瀑布流组件”，而是把布局决策拆成可测试的数据变换。页面只渲染结果，搜索和加载复用同一条链路，后端假数据又通过契约测试保证足够多、足够有差异。这样后续接入分页、真实图片比例或会话收藏卡片时，演进路径会清晰很多。

@@ -2,8 +2,11 @@
   "name": "server",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
-    "test": "npm run test:config",
+    "test": "node --test tests/project-config.contract.test.mjs tests/waterfall-layout.test.mjs",
     "dev": "node server.js",
     "dev:next": "next dev",
     "build": "next build",

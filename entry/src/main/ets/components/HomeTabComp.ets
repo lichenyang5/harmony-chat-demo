@@ -12,13 +12,12 @@ import { CartState, getCartState } from '../viewmodel/CartState'
 /**
  * 首页 Tab 组件。
  *
- * 职责：纯 UI 渲染（顶部问候 + 搜索框 + 商品瀑布流 + 购物车入口）。
- * 所有业务逻辑（路由跳转、拉取商品、搜索过滤）委托给 HomeController。
+ * 职责：纯 UI 渲染（顶部问候 + 搜索框 + AI 灵感瀑布流 + 购物车入口）。
+ * 所有业务逻辑（路由跳转、拉取内容、搜索和高度分列）委托给 HomeController。
  *
  * 响应式说明：
  * - aboutToAppear 时 controller.loadProducts() 拉 /api/products → vm.products
- * - 商品瀑布流：两列独立纵向排列，避免等高 Grid 的同行留白
- *   / vm.searchKeyword 自动建立依赖
+ * - 内容瀑布流：Controller 估算完整卡片高度，并把下一项放入更短列
  * - 购物车角标：读全局单例 cart.totalCount，加购后自动同步
  */
 @ComponentV2
@@ -50,7 +49,7 @@ export struct HomeTabComp {
             .fontWeight(FontWeight.Bold)
             .fontColor(this.theme.textPrimary)
 
-          Text('欢迎来到精选课程')
+          Text('发现实用 AI 灵感')
             .fontSize(12)
             .fontColor(this.theme.textSecondary)
         }
@@ -89,13 +88,13 @@ export struct HomeTabComp {
       // ── 搜索框 ──────────────────────────────────────────────────────
       Search({
         value: this.vm.searchKeyword,
-        placeholder: '搜索商品 / 教程'
+        placeholder: '搜索提示词 / AI 助手'
       })
         .width('92%')
         .height(40)
         .margin({ bottom: 12 })
         .onChange((v: string) => {
-          this.vm.searchKeyword = v
+          this.controller.updateSearchKeyword(v)
         })
 
       // ── 主区域：loading / error / 商品瀑布流 三选一 ────────────────────
@@ -105,7 +104,7 @@ export struct HomeTabComp {
             .width(40)
             .height(40)
             .color(this.theme.primary)
-          Text('正在加载商品…')
+          Text('正在加载灵感…')
             .fontSize(12)
             .fontColor(this.theme.textSecondary)
         }
@@ -126,12 +125,22 @@ export struct HomeTabComp {
         .width('100%')
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
+      } else if (this.vm.leftProducts.length === 0 && this.vm.rightProducts.length === 0) {
+        Column({ space: 10 }) {
+          Text('🔍').fontSize(42)
+          Text('没有找到相关提示词或 AI 助手')
+            .fontSize(13)
+            .fontColor(this.theme.textSecondary)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
       } else {
         Scroll() {
           Row({ space: 12 }) {
             Column({ space: 12 }) {
               ForEach(
-                this.controller.getFilteredProducts().filter((_p: Product, index: number) => index % 2 === 0),
+                this.vm.leftProducts,
                 (product: Product) => {
                   ProductCardComp({
                     product: product,
@@ -145,7 +154,7 @@ export struct HomeTabComp {
 
             Column({ space: 12 }) {
               ForEach(
-                this.controller.getFilteredProducts().filter((_p: Product, index: number) => index % 2 === 1),
+                this.vm.rightProducts,
                 (product: Product) => {
                 ProductCardComp({
                   product: product,

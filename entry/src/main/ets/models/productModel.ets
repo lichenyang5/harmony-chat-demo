@@ -1,5 +1,5 @@
 /**
- * 商品模型。
+ * 首页内容模型。沿用 Product 名称以兼容收藏、详情和购物车链路。
  *
  * 注意：旧版项目用 MOCK_PRODUCTS 写死数据；接入 /api/products 接口后
  * 已移除，商品列表统一由 HomeController.loadProducts() 拉取。
@@ -16,4 +16,5 @@ export class Product {
   sales: number = 0            // 销量
   stock: number = 0            // 库存
   coverHeight: number = 140    // 首页瀑布流封面高度
+  contentType: string = 'prompt' // prompt：提示词；assistant：AI 助手模板
 }

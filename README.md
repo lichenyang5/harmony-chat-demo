@@ -1,6 +1,6 @@
 # Harmony Chat Demo
 
-一个用于学习 HarmonyOS、ArkTS 和 ArkUI 的原生应用 Demo，包含商城瀑布流、本地登录、SSE 模拟聊天、业务卡片、历史会话抽屉和 RDB 持久化。
+一个用于学习 HarmonyOS、ArkTS 和 ArkUI 的原生应用 Demo，包含 AI 灵感瀑布流、本地登录、SSE 模拟聊天、业务卡片、历史会话抽屉和 RDB 持久化。
 
 > 当前 AI 回复来自本地 Next.js Mock Server，用于演示聊天产品结构和流式交互，尚未接入真实大模型。
 
@@ -8,7 +8,7 @@
 
 | 模块 | 功能 |
 | --- | --- |
-| 首页 | 双列瀑布流、商品卡片、搜索、收藏与购物车 |
+| 首页 | 最短列高度均衡瀑布流、提示词 / AI 助手模板、搜索与收藏 |
 | 登录 | 单个本地演示用户、登录状态持久化、路由拦截 |
 | AI 聊天 | SSE 流式回复、停止、重发、重新生成、消息状态机 |
 | 业务卡片 | 确认上车点、确认行程等服务端驱动卡片 |
@@ -103,6 +103,8 @@ Copy-Item .\build-profile.example.json5 .\build-profile.json5
 
 ### 3. 启动本地服务端
 
+请使用 Node.js 22.18 或更高版本（算法测试会直接加载纯 TypeScript 文件）。
+
 ```bash
 cd server
 npm install
@@ -147,10 +149,10 @@ ipconfig
 
 ## 推荐演示流程
 
-### 商城与收藏
+### AI 灵感流与收藏
 
-1. 登录后查看首页双列瀑布流；
-2. 收藏不同高度的商品卡片；
+1. 登录后滚动查看提示词与 AI 助手模板瀑布流；
+2. 搜索并收藏不同高度的内容卡片；
 3. 在“我的收藏”中检查收藏状态；
 4. 进入商品详情、购物车和结算流程。
 
@@ -178,7 +180,7 @@ ipconfig
 - [从双页面跳转到单入口右侧抽屉](./docs/34-harmony-chat-single-entry-drawer-architecture.md)
 - [RDB、会话切换、左滑删除与并发保护](./docs/35-harmony-chat-history-drawer-session-management.md)
 - [隐形遮罩挡住 TextInput 的排错过程](./docs/36-arkui-invisible-overlay-blocks-textinput.md)
-- [HarmonyOS 商品瀑布流首页实现](./docs/32-harmonyos-waterfall-product-feed.md)
+- [HarmonyOS 最短列高度均衡瀑布流](./docs/32-harmonyos-waterfall-product-feed.md)
 
 ### 聊天与工程能力
 

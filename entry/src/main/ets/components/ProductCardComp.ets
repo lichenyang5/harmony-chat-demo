@@ -3,9 +3,9 @@ import { Product } from '../models/productModel'
 import { FavoriteState, getFavoriteState } from '../viewmodel/FavoriteState'
 
 /**
- * 商品卡片组件。
+ * AI 内容卡片组件。
  *
- * 职责：纯展示。商品图 + 名称 + 描述 + 价格（含原价划线）+ 评分 + 销量 + 角标 + 收藏。
+ * 职责：纯展示。封面 + 标题 + 摘要 + 内容类型 + 评分 + 使用次数 + 角标 + 收藏。
  * 点击事件通过 @Event onTap 上报给父组件（首页/搜索结果页），子组件
  * 不直接耦合路由或 Controller。
  *
@@ -36,42 +36,45 @@ export struct ProductCardComp {
     // 部分 ArkUI 版本里对 Stack 子节点不生效导致全部子元素跑到中间。
     Stack({ alignContent: Alignment.TopEnd }) {
       Column({ space: 6 }) {
-        // 同一商品图按服务端高度裁切，形成错落的瀑布流节奏。
+        // 同一张 Demo 图按服务端高度裁切，形成错落的瀑布流节奏。
         Image($rawfile(this.product.image))
           .width('100%')
           .height(this.product.coverHeight)
           .objectFit(ImageFit.Cover)
           .borderRadius(8)
 
-        // 商品名（单行省略）
+        // 标题最多两行；行数也会被分列算法纳入高度预估。
         Text(this.product.name)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.theme.textPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        // 描述允许两行，配合不同长度的接口文案形成不同卡片高度。
-        Text(this.product.desc)
-          .fontSize(11)
-          .fontColor(this.theme.textSecondary)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        // 价格行：当前价 + 原价划线（仅当原价 > 现价才显示）
-        Row({ space: 6 }) {
-          Text(`¥${this.product.price}`)
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.theme.danger)
+        // 摘要允许三行，长短文案进一步拉开内容卡片高度。
+        Text(this.product.desc)
+          .fontSize(11)
+          .fontColor(this.theme.textSecondary)
+          .maxLines(3)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          if (this.product.originalPrice > this.product.price) {
-            Text(`¥${this.product.originalPrice}`)
-              .fontSize(11)
-              .fontColor(this.theme.textTertiary)
-              .decoration({ type: TextDecorationType.LineThrough })
-          }
+        // 内容类型 + 免费使用状态。
+        Row() {
+          Text(this.product.contentType === 'assistant' ? 'AI 助手' : '提示词')
+            .fontSize(10)
+            .fontColor(this.theme.primary)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .backgroundColor(this.theme.placeholderBg)
+            .borderRadius(6)
+
+          Blank()
+
+          Text('免费使用')
+            .fontSize(10)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.theme.primary)
         }
+        .width('100%')
 
         // 评分 + 销量行
         Row() {
@@ -81,7 +84,7 @@ export struct ProductCardComp {
 
           Blank()
 
-          Text(`已售 ${this.product.sales}`)
+          Text(`${this.product.sales} 人使用`)
             .fontSize(10)
             .fontColor(this.theme.textTertiary)
         }
