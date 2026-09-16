@@ -1,12 +1,14 @@
 import { ChatHistoryController } from '../controller/ChatHistoryController'
 import { ChatSession } from '../models/chatModel'
+import { ChatHistoryListItemComp } from './ChatHistoryListItemComp'
+import { ChatHistoryStatusComp } from './ChatHistoryStatusComp'
 import { ThemeState, getThemeState, LogUtil } from 'common'
 
 /**
- * 聊天历史右侧抽屉。
+ * 聊天历史右侧抽屉的业务编排容器。
  *
- * 仅负责历史列表的展示和操作意图上报；当前会话的切换、新建与重置
- * 统一由 ChatTabComp 持有的 ChatSessionController 完成。
+ * 本组件负责加载列表、操作锁、Toast、删除落库和事件回传；单条会话与空状态
+ * 的视觉交给子组件。当前会话切换、新建与重置仍由 ChatTabComp 统一完成。
  */
 @ComponentV2
 export struct ChatHistoryDrawerComp {
@@ -21,8 +23,10 @@ export struct ChatHistoryDrawerComp {
   @Event onSessionDeleted: (sessionId: string) => void = (_sessionId: string) => {}
   @Event onOperationStateChange: (pending: boolean) => void = (_pending: boolean) => {}
 
+  /** 抽屉自己的列表快照；删除成功后用不可变过滤结果立即刷新。 */
   @Local sessions: ChatSession[] = []
   @Local theme: ThemeState = getThemeState()
+  /** 防止抽屉内部的选择或删除动作并发执行。 */
   @Local isOperating: boolean = false
 
   private controller: ChatHistoryController = new ChatHistoryController()
@@ -60,6 +64,10 @@ export struct ChatHistoryDrawerComp {
     }
   }
 
+  /**
+   * 统一判断会话动作是否可执行。子组件只发出意图，避免每个列表项重复维护
+   * 生成中、页面保存中和抽屉操作中的三套锁状态。
+   */
   private actionsLocked(): boolean {
     if (this.isGenerating) {
       this.showHint('AI 正在生成回复，请先停止或等待完成')
@@ -168,77 +176,21 @@ export struct ChatHistoryDrawerComp {
         .border({ width: { bottom: 0.5 }, color: this.theme.divider })
 
         if (this.sessions.length === 0) {
-          Column({ space: 12 }) {
-            Text('○')
-              .fontSize(44)
-              .fontColor(this.theme.textTertiary)
-
-            Text('暂无对话记录')
-              .fontSize(15)
-              .fontColor(this.theme.textTertiary)
-
-            Text('点击右上角新建会话开始聊天')
-              .fontSize(13)
-              .fontColor(this.theme.textPlaceholder)
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .backgroundColor(this.theme.bg)
+          ChatHistoryStatusComp()
         } else {
           List() {
             ForEach(this.sessions, (session: ChatSession) => {
-              ListItem() {
-                Row({ space: 12 }) {
-                  Text(session.title.length > 0 ? session.title.charAt(0) : '新')
-                    .width(42)
-                    .height(42)
-                    .fontSize(17)
-                    .fontColor(this.theme.onPrimary)
-                    .textAlign(TextAlign.Center)
-                    .backgroundColor(this.theme.primary)
-                    .borderRadius(21)
-                    .flexShrink(0)
-
-                  Column({ space: 5 }) {
-                    Row({ space: 8 }) {
-                      Text(session.title.length > 0 ? session.title : '新对话')
-                        .fontSize(15)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor(this.theme.textPrimary)
-                        .maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis })
-                        .layoutWeight(1)
-
-                      Text(this.controller.formatTime(session.updateTime))
-                        .fontSize(11)
-                        .fontColor(this.theme.textTertiary)
-                    }
-                    .width('100%')
-
-                    Text(session.preview.length > 0 ? session.preview : '暂无回复')
-                      .fontSize(13)
-                      .fontColor(this.theme.textSecondary)
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  }
-                  .layoutWeight(1)
-                  .alignItems(HorizontalAlign.Start)
-
-                  if (session.id === this.currentSessionId) {
-                    Text('当前')
-                      .fontSize(10)
-                      .fontColor(this.theme.primary)
-                  }
+              ChatHistoryListItemComp({
+                session: session,
+                currentSessionId: this.currentSessionId,
+                formattedTime: this.controller.formatTime(session.updateTime),
+                actionsDisabled: this.isGenerating || this.operationPending || this.isOperating,
+                onSelect: (sessionId: string) => {
+                  this.requestSelectSession(sessionId)
+                },
+                onDelete: (sessionId: string) => {
+                  this.requestDeleteSession(sessionId)
                 }
-                .width('100%')
-                .padding({ left: 14, right: 12, top: 14, bottom: 14 })
-                .backgroundColor(session.id === this.currentSessionId ? this.theme.infoBg : this.theme.surface)
-              }
-              .swipeAction({ end: this.deleteButton(session.id) })
-              .onClick(() => {
-                this.requestSelectSession(session.id)
               })
             }, (session: ChatSession) => session.id)
           }
@@ -263,20 +215,5 @@ export struct ChatHistoryDrawerComp {
     .height('100%')
     .opacity(this.visible ? 1 : 0)
     .hitTestBehavior(this.visible ? HitTestMode.Default : HitTestMode.BLOCK_DESCENDANTS)
-  }
-
-  @Builder
-  deleteButton(sessionId: string) {
-    Button('删除')
-      .width(72)
-      .height('100%')
-      .fontSize(14)
-      .backgroundColor(this.isGenerating || this.operationPending || this.isOperating
-        ? this.theme.disabledBg : this.theme.danger)
-      .fontColor(this.theme.onDanger)
-      .borderRadius(0)
-      .onClick(() => {
-        this.requestDeleteSession(sessionId)
-      })
   }
 }
