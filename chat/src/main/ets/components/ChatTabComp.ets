@@ -2,6 +2,7 @@ import { KeyboardAvoidMode } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { ChatController } from '../controller/ChatController'
 import { ChatSessionController } from '../controller/ChatSessionController'
+import { ChatSessionSaveQueue } from '../controller/ChatSessionSaveQueue'
 import { ChatViewModel } from '../viewmodel/ChatViewModel'
 import { ChatListComp } from './ChatListComp'
 import { ChatInputComp } from './ChatInputComp'
@@ -12,7 +13,7 @@ import { WindowUtil, ThemeState, getThemeState, KeyboardController, LogUtil } fr
  * 聊天 Tab 组件（嵌入 HomePage 的 Tab 容器中）。
  *
  * 职责：聊天总容器、历史抽屉开关、消息列表、输入框和状态监听。
- * 会话管理逻辑委托给 ChatSessionController，
+ * 会话管理逻辑委托给 ChatSessionController，保存顺序委托给 ChatSessionSaveQueue，
  * 消息收发逻辑委托给 ChatController，
  * 键盘监听委托给 KeyboardController。
  */
@@ -38,6 +39,12 @@ export struct ChatTabComp {
 
   /** 会话管理控制器（加载、新建、持久化） */
   private sessionController: ChatSessionController = new ChatSessionController(this.vm)
+
+  /**
+   * 会话保存队列。队列拥有 Promise 顺序，页面只保留可响应的 busy 状态，
+   * 避免连续保存中较早任务结束时过早解除会话操作锁。
+   */
+  private saveQueue: ChatSessionSaveQueue = new ChatSessionSaveQueue()
 
   /** 键盘监听控制器（注册/注销 keyboardHeightChange 事件）*/
   private keyboardController: KeyboardController = new KeyboardController()
@@ -92,12 +99,16 @@ export struct ChatTabComp {
   }
 
   private async persistCurrentSession(): Promise<void> {
-    this.sessionOperationPending = true
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
     try {
-      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
-      await this.sessionController.persistSession(ctx)
-    } finally {
-      this.sessionOperationPending = false
+      await this.saveQueue.enqueue(
+        () => this.sessionController.persistSession(ctx),
+        (pending: boolean) => {
+          this.sessionOperationPending = pending
+        }
+      )
+    } catch (error) {
+      LogUtil.e('ChatTabComp', 'persist session failed: ' + JSON.stringify(error))
     }
   }
 
